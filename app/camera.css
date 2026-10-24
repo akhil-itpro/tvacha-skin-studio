@@ -1,0 +1,15 @@
+.camera-capture { max-width: 550px; margin: 0 auto; padding: 0 4px 8px; }
+.camera-capture .camera-back { margin: 0 0 26px -10px; }
+.camera-capture h2 { font-family: var(--font-heading, 'Archivo'), sans-serif; font-size: clamp(28px, 5vw, 38px); line-height: 1.13; letter-spacing: -1.2px; margin: 10px 0 14px; }
+.camera-capture > p:not(.eyebrow):not(.camera-hint):not(.camera-error):not(.camera-privacy) { color: #46595D; font-size: 16px; line-height: 1.6; max-width: 430px; }
+.camera-capture .camera-frame { border: 1px solid #C9D8D3; transition: border-color 160ms ease; }
+.camera-capture .camera-frame-ready { border-color: #1F6B63; }
+.camera-capture .camera-hint { font-size: 14px; line-height: 1.6; color: #46595D; margin: 10px 0 4px; }
+.camera-capture .camera-checks { font-family: 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: .06em; }
+.camera-capture .camera-actions .button { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.camera-capture .camera-actions .button:disabled { opacity: .45; cursor: not-allowed; }
+.camera-capture .camera-error { font-size: 14px; line-height: 1.6; border: 1px solid #E7C9CE; }
+.camera-capture .camera-privacy { border-top: 1px solid #C9D8D3; padding-top: 18px; }
+.camera-capture button:focus-visible { outline: 3px solid #1F6B63; outline-offset: 4px; }
+@media (max-width: 480px) { .camera-capture .camera-back { margin-bottom: 20px; } .camera-capture .camera-frame { max-width: 310px !important; } .camera-capture .camera-actions { margin-top: 16px !important; } }
+@media (prefers-reduced-motion: reduce) { .camera-capture * { transition: none !important; animation: none !important; } }
