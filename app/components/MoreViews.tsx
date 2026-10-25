@@ -120,6 +120,7 @@ export function Result({
               </div>
             </div>
           ))}
+          {!plan.focusAreas.length && <p className="focus-empty">Start with the essentials. This photo doesn’t support a confident focus area, so we haven’t added a new active.</p>}
           <div className="ingredient-label">
             <span className="mono">WHAT TO LOOK FOR</span>
             <p className="mono">
@@ -130,6 +131,19 @@ export function Result({
           <Sticker />
         </div>
       </div>
+      {scan.analysis && <section className="photo-observations" aria-labelledby="observations-title">
+        <div className="card-heading"><div><span className="eyebrow">VISIBLE DETAIL, WITH LIMITS</span><h2 id="observations-title">What this photo could tell us.</h2><p>Each concern is assessed separately. Uncertain observations don’t drive product picks.</p></div></div>
+        <dl>{CONCERN_KEYS.map(key => {
+          const concern = scan.analysis!.concerns.find(item => item.key === key);
+          if (!concern) return null;
+          const limited = concern.level === null || concern.confidence === "low";
+          return <div className={limited ? "observation-limited" : ""} key={key}>
+            <dt><span className="concern-code" style={{background:CONCERN_META[key].color,color:key === "shine" ? "#000" : "#fff"}}>{CONCERN_META[key].code}</span>{CONCERN_META[key].name}<small className="mono">{limited ? "LIMITED DETAIL" : `${concern.confidence.toUpperCase()} CONFIDENCE`}</small></dt>
+            <dd>{concern.note}{concern.zones.length > 0 && !limited && <span className="observation-zones">{concern.zones.join(" · ")}</span>}</dd>
+          </div>;
+        })}</dl>
+        {scan.analysis.retake_reasons.length > 0 && <details className="photo-tips"><summary>For more detail next time · optional</summary><ul>{scan.analysis.retake_reasons.map((tip,index) => <li key={index}>{tip}</li>)}</ul></details>}
+      </section>}
       <div className="card-heading section-heading">
         <div>
           <span className="eyebrow">FEWER STEPS. MORE CONSISTENCY.</span>

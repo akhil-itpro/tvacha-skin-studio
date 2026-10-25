@@ -8,7 +8,7 @@ Tvacha gives cosmetic guidance, not a diagnosis. The UI calls out uncertainty an
 
 - Responsive overview and Check, Routine, Shelf, Progress and account screens, with an accessible mobile navigation and a complete `/styleguide`.
 - Age gate, two separate unticked consent choices, four-question quiz, and a symptom check that stops the scan and product flow when any red flag is selected.
-- Front-camera capture, mirrored preview, on-device single-face/position/light/sharpness checks, JPEG resize, photo confirmation and upload fallback. The original photo stays in memory unless the user separately chooses to save it.
+- Front-camera capture, mirrored preview, optional on-device framing/light/focus tips, automatic face framing, JPEG resize, photo confirmation and upload fallback. The original photo stays in memory unless the user separately chooses to save it.
 - Server-only Groq image analysis with explicit zero-data-retention configuration, bounded requests, strict JSON validation, one retry and prohibited-language checks. Optional Gemini integration requires paid-service data protections. Provider failure or missing configuration gives a clearly labelled quiz routine with no photo scores.
 - A printed Skin Label for valid photo results, confidence per concern, up to three focus areas, AM/PM routines and ingredient guidance.
 - 24 real products from three official brand catalogues. Prices are dated reference list prices, not a live price feed. Product selection is code, never AI or commission-based ranking. Budget, fragrance, pregnancy cautions, shelf coverage, sunscreen and one-new-active limits are enforced. Lower-cost eligible alternatives appear beside product picks.
@@ -111,7 +111,7 @@ node node_modules/typescript/bin/tsc --noEmit
 node scripts/run-framework.mjs build
 ```
 
-Run `npm test` for all 61 unit/regression checks. The seven HTTP integration checks run against the local database/storage with `TVACHA_TEST_URL` and `TVACHA_ADMIN_TEST=1`, as documented in BACKEND.md. The suite checks catalogue integrity, strict six-concern JSON, restricted output, uncertainty, symptom stops, budget/sensitivity combinations, safe shelf matching, date validity, provider retries, bounded responses, data policy gates, deletion barriers, quotas, private photos and sign-in migration.
+Run `npm test` for all 69 unit/regression checks. The seven HTTP integration checks run against the local database/storage with `TVACHA_TEST_URL` and `TVACHA_ADMIN_TEST=1`, as documented in BACKEND.md. The suite checks catalogue integrity, strict six-concern JSON, restricted output, uncertainty, symptom stops, budget/sensitivity combinations, safe shelf matching, date validity, provider retries, bounded responses, data policy gates, deletion barriers, quotas, private photos and sign-in migration.
 
 Unit tests do not establish clinical accuracy, real-provider latency, deployed account isolation or real-device camera quality. See the task's verification report for checks actually completed. Re-run relevant tests when changing safety rules, data ownership, consent or product selection.
 
@@ -120,8 +120,8 @@ Unit tests do not establish clinical accuracy, real-provider latency, deployed a
 Use the deployed HTTPS app on Android Chrome and iPhone Safari:
 
 1. Start a check; verify under-18 ends politely and both consent choices begin unchecked. Complete the quiz, then select a red flag: no camera, scan or products should follow.
-2. Start again without red flags. Deny camera access and confirm the upload option appears. Test no face, two faces, dark light and a blurry photo; capture should remain blocked. Use a clear front-facing photo and confirm/retake.
-3. With AI configured, check all six concern rows and their confidence labels. With AI unavailable, confirm there are no invented levels and that the result clearly says quiz-based.
+2. Start again without red flags. Deny camera access and confirm the upload option appears. Test no face, two faces, dark light and a blurry photo. Upload and capture remain available; quality tips must not block the check. Confirm the photo or choose another.
+3. With AI configured, check all six concern rows and their confidence labels. Unreadable or low-confidence concerns use dashed bars, never reassuring zeroes. A primary face can produce a partial result; an image with no usable subject still completes with a clearly labelled quiz routine. With AI unavailable, confirm there are no invented levels and that the result clearly says quiz-based.
 4. Change budgets and sensitivities. Confirm picks stay within budget, fragrance exclusions apply, pregnancy cautions are respected and sunscreen remains a step even when no catalogue product fits.
 5. Tick routine steps, refresh and confirm they survive. Add an owned product and verify the same step is no longer sold again. Compare two valid labels; a low-confidence comparison must say “not sure”.
 6. Save a guest label by signing in. Use a second account/browser profile to check that scans, ticks, shelf, consent and photos are isolated. A normal account must be denied founder APIs.

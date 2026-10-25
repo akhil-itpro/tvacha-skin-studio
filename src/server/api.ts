@@ -10,7 +10,7 @@ import {
   containsForbiddenLanguage,
 } from "@/src/domain/safety";
 import type { Product, ShelfItem, QuizAnswers } from "@/src/domain/types";
-import { analysePhoto, analysisConfiguration } from "./analysis";
+import { analysePhoto, analysisConfiguration, completePhotoResult } from "./analysis";
 import { reserveScan } from "./quota";
 import { historyOptions, historyCursor, historyQuery } from "./history";
 import {
@@ -344,6 +344,7 @@ async function analyse(request: Request, current: Owner) {
   ]);
   const rules = await ingredientRules();
   let originalConsentId: string | null = null;
+  let unreadablePhoto = false;
   let result: Awaited<ReturnType<typeof analysePhoto>> = {
     analysis: null,
     model: "quiz",
@@ -373,7 +374,7 @@ async function analyse(request: Request, current: Owner) {
     if (!photo)
       throw new HttpError(
         400,
-        "Use a clear JPEG photo, resized to 1024 pixels.",
+        "We couldn’t prepare this image. Choose another photo through the photo picker.",
       );
     if (analysisConfiguration(env).ready) {
       const day = new Date().toISOString().slice(0, 10),
@@ -401,34 +402,9 @@ async function analyse(request: Request, current: Owner) {
         };
       else result = await analysePhoto(photo.data);
     } else result = await analysePhoto(photo.data);
-    if (result.analysis && !result.analysis.image_ok) {
-      const inserted = await db()
-        .prepare(
-          "INSERT INTO events (id,owner_id,name,properties,created_at) SELECT ?,?,'retake_needed','{}',? WHERE EXISTS(SELECT 1 FROM profiles WHERE owner_id = ? AND created_at = ?) AND (SELECT id FROM consents WHERE owner_id = ? AND purpose = 'analysis' AND granted = 1 ORDER BY created_at DESC, rowid DESC LIMIT 1) = ? AND (SELECT granted FROM consents WHERE owner_id = ? AND purpose = 'analysis' ORDER BY created_at DESC, rowid DESC LIMIT 1) = 1",
-        )
-        .bind(
-          id(),
-          current.id,
-          now(),
-          current.id,
-          profile.created_at,
-          current.id,
-          originalConsentId,
-          current.id,
-        )
-        .run();
-      if (!inserted.meta.changes)
-        throw new HttpError(
-          409,
-          "Your data or consent changed during the check. The photo result was discarded.",
-        );
-      return {
-        retake: true,
-        message: result.message,
-        retakeReasons: result.analysis.retake_reasons,
-        routine: buildRoutine(data.quiz, null, shelf, products, rules),
-      };
-    }
+    const completed = completePhotoResult(result);
+    unreadablePhoto = completed.unreadable;
+    result = completed;
   }
   const scanId = id(),
     createdAt = now(),
@@ -469,7 +445,7 @@ async function analyse(request: Request, current: Owner) {
   const writes = [insert, guardedEvent("result_viewed", { source })];
   if (data.mode === "photo")
     writes.push(
-      guardedEvent(result.analysis ? "analysis_ok" : "analysis_failed"),
+      guardedEvent(unreadablePhoto ? "retake_needed" : result.analysis ? "analysis_ok" : "analysis_failed"),
     );
   if (result.analysis?.concerns.some((c) => c.confidence === "low"))
     writes.push(guardedEvent("low_confidence"));

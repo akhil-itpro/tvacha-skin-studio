@@ -47,8 +47,10 @@ export async function shareLabel(scan: ShareableScan, plan: RoutinePlan): Promis
       ctx.fillStyle = color; ctx.fillRect(104, y - 26, 36, 36);
       text(code, 114, y, 23, key === 'shine' ? '#000000' : '#FFFFFF', '"IBM Plex Mono", monospace', 700);
       text(label, 161, y, 27);
-      for (let n = 0; n < 3; n++) { ctx.fillStyle = concern && n < concern.level ? color : '#E9F1EE'; ctx.fillRect(540 + n * 67, y - 22, 53, 18); }
-      text(concern ? `${concern.confidence === 'medium' ? 'MED' : concern.confidence.toUpperCase()} SURE` : 'NOT READ', 765, y, 18, '#46595D', '"IBM Plex Mono", monospace');
+      const limited = !concern || concern.level === null || concern.confidence === 'low';
+      if (limited) text('NOT READABLE', 540, y, 18, '#46595D', '"IBM Plex Mono", monospace');
+      else for (let n = 0; n < 3; n++) { ctx.fillStyle = n < concern.level! ? color : '#E9F1EE'; ctx.fillRect(540 + n * 67, y - 22, 53, 18); }
+      text(limited ? 'LIMITED' : `${concern!.confidence === 'medium' ? 'MED' : concern!.confidence.toUpperCase()} SURE`, 765, y, 18, '#46595D', '"IBM Plex Mono", monospace');
     });
   } else {
     text('A routine from my answers.', 104, 330, 38, '#12262B', 'Archivo, sans-serif', 700);

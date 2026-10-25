@@ -95,6 +95,11 @@ test('HTTP private R2 photos require opt-in, remain owner-only and are deleted o
   await a('/api/consents','POST',{analysis:true});
   assert.equal((await a('/api/state')).data.consents.progressPhotos,false);
   const connected=(await a('/api/state')).data.services.photoAnalysis;
+  if(!connected){
+    const tiny=await sharp({create:{width:96,height:96,channels:3,background:'#101010'}}).jpeg().toBuffer();
+    const lowResolution=await a('/api/analyse','POST',{quiz,mode:'photo',image:'data:image/jpeg;base64,'+tiny.toString('base64')});
+    assert.equal(lowResolution.status,200);assert.equal(lowResolution.data.scan.source,'quiz');assert.equal(lowResolution.data.retake,undefined);
+  }
   if(!connected){const fallback=await a('/api/analyse','POST',{quiz,mode:'photo',image});assert.equal(fallback.status,200);assert.equal(fallback.data.scan.analysis,null);assert.equal(fallback.data.scan.source,'quiz');}
   await a('/api/account','DELETE',{confirm:'DELETE'});await b('/api/account','DELETE',{confirm:'DELETE'});
 });

@@ -7,6 +7,20 @@
 .product-alternatives a strong { flex-shrink: 0; }
 .product-alternatives small { display: block; font-size: 11px; color: #46595d; line-height: 1.5; margin-top: 4px; }
 .history-more { margin-top: 22px; }
+.level-bars.unreadable i { background: transparent; border: 1px dashed #6b7f79; }
+.label-readability-note { margin: 0; padding: 12px 22px; font-size: 11px; line-height: 1.5; border-top: 1px solid #c9d8d3; color: #46595d; }
+.focus-empty { line-height: 1.7; color: #46595d; }
+.photo-observations { margin: 36px 0; border-top: 2px solid #12262b; padding-top: 22px; }
+.photo-observations h2 { margin-top: 8px; }
+.photo-observations dl { display: grid; grid-template-columns: 1fr 1fr; margin: 22px 0 0; gap: 0 28px; }
+.photo-observations dl > div { padding: 17px 0; border-top: 1px solid #c9d8d3; }
+.photo-observations dt { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 14px; }
+.photo-observations dt small { margin-left: auto; font-size: 9px; color: #46595d; text-align: right; }
+.photo-observations dd { margin: 9px 0 0 38px; color: #46595d; font-size: 14px; line-height: 1.65; }
+.observation-zones { display: block; font-size: 11px; color: #1f6b63; margin-top: 6px; }
+.photo-tips { margin-top: 18px; font-size: 14px; line-height: 1.7; }
+.photo-tips summary { cursor: pointer; color: #1f6b63; padding: 8px 0; font-weight: 700; }
+@media (max-width: 600px) { .photo-observations dl { grid-template-columns: 1fr; } }
 .founder-site-details { margin-bottom: 26px; }
 .founder-site-details h2 { margin-top: 10px; }
 .founder-site-details > p { max-width: 780px; color: #46595d; line-height: 1.7; }

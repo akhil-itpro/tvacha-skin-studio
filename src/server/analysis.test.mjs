@@ -22,7 +22,7 @@ for (const [name, file] of [
   modules[name] =
     "data:text/javascript;base64," + Buffer.from(code).toString("base64");
 }
-const { analysisConfiguration, requestPhotoAnalysis } = await import(
+const { analysisConfiguration, requestPhotoAnalysis, completePhotoResult } = await import(
   modules.analysis
 );
 const keys = [
@@ -189,7 +189,7 @@ test("provider response sizes are bounded before JSON decoding", async () => {
   assert.equal(calls, 2);
   assert.equal(result.analysis, null);
 });
-test("unusable photos produce a real retake response", async () => {
+test("unusable photos contain no measured scores and complete with a quiz routine", async () => {
   const retake = valid();
   retake.image_ok = false;
   retake.retake_reasons = ["Face a window and try again."];
@@ -201,5 +201,31 @@ test("unusable photos produce a real retake response", async () => {
     response(retake),
   );
   assert.equal(result.analysis.image_ok, false);
-  assert.match(result.message, /clearer photo/);
+  assert.match(result.message, /based on your answers/);
+  assert.ok(result.analysis.concerns.every(concern=>concern.level===null));
+  const completed=completePhotoResult(result);
+  assert.equal(completed.analysis,null);assert.equal(completed.unreadable,true);
+});
+
+test('a low-detail face gives a partial result without discarding readable concerns',async()=>{
+  const partial=valid();partial.concerns[1]={...partial.concerns[1],level:null,confidence:'low',zones:[],note:'Soft focus hides the detail here.'};partial.retake_reasons=['A little more light could show more detail.'];
+  let calls=0;
+  const result=await requestPhotoAnalysis('low-resolution',config,async()=>{calls++;return response(partial);});
+  assert.equal(calls,1);assert.deepEqual(result.analysis,partial);assert.match(result.message,/1 of 6/);
+  assert.equal(completePhotoResult(result).unreadable,false);
+});
+test('an initial blanket quality rejection gets one partial-read review, then finishes',async()=>{
+  const rejected=valid();rejected.image_ok=false;rejected.retake_reasons=['A soft photo.'];
+  let calls=0;
+  const result=await requestPhotoAnalysis('soft-face',config,async(url,options)=>{
+    calls++;const body=JSON.parse(options.body);
+    if(calls===2)assert.match(body.messages[1].content[0].text,/partial result/);
+    return response(calls===1?rejected:valid());
+  });
+  assert.equal(calls,2);assert.equal(result.analysis.image_ok,true);
+});
+test('a rate-limited quality review preserves the first valid assessment and still completes',async()=>{
+  const rejected=valid();rejected.image_ok=false;rejected.retake_reasons=['Soft focus hides the detail.'];let calls=0;
+  const result=await requestPhotoAnalysis('test',config,async()=>++calls===1?response(rejected):new Response('{}',{status:429}));
+  assert.equal(calls,2);assert.equal(result.analysis.image_ok,false);assert.equal(completePhotoResult(result).analysis,null);assert.match(result.message,/based on your answers/);
 });

@@ -106,7 +106,7 @@ export function validateImage(
       }
       i += 2 + length;
     }
-    if (width < 150 || height < 150 || width > 1600 || height > 1600)
+    if (width < 32 || height < 32 || width > 1600 || height > 1600)
       return null;
     return { data: match[1], bytes };
   } catch {

@@ -140,6 +140,10 @@ This is tested server authorization, not database RLS certification. Production 
 
 ## History and contact configuration
 
+Photo results allow `level: null` only with low confidence and no inferred zones. Clear zeroes remain distinct from missing detail. Photo checks always finish with a saved result when the request and consent remain valid: partial observations when a primary face can be assessed, or a labelled quiz routine when it cannot. The optional client detector supplies framing only and cannot authorize results or bypass server validation.
+
+For repeatable provider QA, run `node scripts/prepare-quality-fixtures.mjs`, then `node scripts/check-ai.mjs --quality-test` or append `--clear-test`. The checker accepts the key through hidden stdin only; it sends the fixed public test portrait, not a visitor photo. Provider diagnostics are limited to statuses, timing, validation and test-fixture photo tips. Generated fixtures stay in ignored `outputs/photo-qa/`; no fixture is deployed. Free provider rate limits still apply. A quality review that encounters a limit retains the initial valid assessment.
+
 `GET /api/scans` and `GET /api/photos` return owner-only pages with `nextCursor` and `totalCount`. Pages default to 30 records, with a maximum of 50. The cursor combines creation timestamp and ID; every query still filters the server identity. `?id=` retrieves an individually owned label/photo. Photo lists expose metadata only.
 
 Consent writes may specify `analysis`, `progressPhotos`, or both; at least one explicit choice is required. Omitted purposes remain untouched. `DELETE /api/waitlist` with `{}` removes only the current owner’s membership. `PATCH /api/admin/site` takes `{operatorName,supportEmail}`; both may be cleared. Only these validated contact fields are shared in `/api/state`, never arbitrary settings.

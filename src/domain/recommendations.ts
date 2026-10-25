@@ -23,10 +23,10 @@ export function getFocusAreas(
 ): FocusArea[] {
   const measured = analysis?.image_ok
     ? analysis.concerns
-        .filter((concern) => concern.level > 0 && concern.confidence !== "low")
+        .filter((concern) => concern.level !== null && concern.level > 0 && concern.confidence !== "low")
         .sort(
           (a, b) =>
-            b.level - a.level ||
+            (b.level ?? 0) - (a.level ?? 0) ||
             Number(b.key === quiz.mainConcern) -
               Number(a.key === quiz.mainConcern) ||
             CONCERN_KEYS.indexOf(a.key) - CONCERN_KEYS.indexOf(b.key),
@@ -324,6 +324,8 @@ export function compareAnalyses(
       !previous.image_ok ||
       !current ||
       !past ||
+      current.level === null ||
+      past.level === null ||
       current.confidence === "low" ||
       past.confidence === "low"
     )

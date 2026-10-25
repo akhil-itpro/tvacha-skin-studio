@@ -9,7 +9,7 @@ export type Sensitivity = 'fragrance' | 'pregnant' | 'none';
 
 export interface SkinConcern {
   key: ConcernKey;
-  level: 0 | 1 | 2 | 3;
+  level: 0 | 1 | 2 | 3 | null;
   confidence: Confidence;
   zones: Zone[];
   note: string;

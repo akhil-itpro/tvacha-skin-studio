@@ -136,7 +136,7 @@ export default function CheckFlow({
     );
     const q = { ...quiz, redFlags: [...flags] };
     try {
-      const d = await api(
+      let d = await api(
         "/api/analyse",
         "POST",
         {
@@ -148,9 +148,9 @@ export default function CheckFlow({
       );
       if (!active.current || controller.signal.aborted) return;
       if (d.retake) {
-        setErr(d.message || "Please try a clearer photo, facing a window.");
-        setStage(8);
-        return;
+        // Compatibility with an older server during deployment: complete the routine.
+        d = await api("/api/analyse", "POST", { quiz: q, mode: "quiz" }, { signal: controller.signal });
+        d.scan.message = "This photo could not be read reliably. Your routine is based on your answers; another photo is optional.";
       }
       if (
         photo &&
@@ -531,8 +531,8 @@ export default function CheckFlow({
             if you’d like.
           </h1>
           <p className="flow-intro">
-            A well-lit selfie can help estimate six visible cosmetic concerns.
-            Your answers alone can also build a useful routine.
+            Use a photo from the camera you have. We’ll assess readable areas
+            and mark uncertain details. Your answers also help build your routine.
           </p>
           {!state?.services.photoAnalysis && (
             <div className="alert">

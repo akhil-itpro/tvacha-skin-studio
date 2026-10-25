@@ -168,7 +168,8 @@ export function SkinLabel({
             const c = photo
               ? scan.analysis?.concerns.find((c) => c.key === key)
               : null;
-            const level = c?.level ?? (sample ? levels[i] : 0);
+            const level = sample ? levels[i] : c?.level ?? null;
+            const unreadable = !sample && (level === null || c?.confidence === "low");
             return (
               <div className="concern-row" key={key}>
                 <span
@@ -178,13 +179,13 @@ export function SkinLabel({
                   {CONCERN_META[key].code}
                 </span>
                 <span className="concern-name">{CONCERN_META[key].name}</span>
-                <div className="level-bars" aria-label={`Level ${level} of 3`}>
+                <div className={"level-bars " + (unreadable ? "unreadable" : "")} aria-label={unreadable ? "Not readable with confidence in this photo" : `Level ${level} of 3`}>
                   {[1, 2, 3].map((n) => (
                     <i
                       key={n}
                       style={{
                         background:
-                          n <= level ? CONCERN_META[key].color : undefined,
+                          !unreadable && level !== null && n <= level ? CONCERN_META[key].color : undefined,
                       }}
                     />
                   ))}
@@ -201,6 +202,7 @@ export function SkinLabel({
           })}
         </div>
       )}
+      {!sample && photo && scan.analysis?.concerns.some(concern => concern.level === null || concern.confidence === "low") && <p className="label-readability-note">Dashed bars = not readable with confidence. They do not mean “no concern”.</p>}
       <div className="skin-label-footer mono">
         <span>
           {sample

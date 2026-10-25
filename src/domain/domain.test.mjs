@@ -18,6 +18,18 @@ const { buildRoutine, compareAnalyses, getFocusAreas, daysUntilRescan } = await 
 const quiz = { skinFeel: 'combination', mainConcern: 'shine', budget: '400to800', sensitivities: ['none'], redFlags: [] };
 const analysis = () => ({ image_ok: true, retake_reasons: [], concerns: CONCERN_KEYS.map((key, i) => ({ key, level: i % 4, confidence: 'medium', zones: ['cheeks'], note: 'Visible in this photo. Light can change the estimate.' })) });
 
+test('unreadable concerns are explicit nulls, never zeroes or confident findings',()=>{
+  const partial=analysis();partial.concerns[0]={...partial.concerns[0],level:null,confidence:'low',zones:[],note:'The detail is not visible.'};
+  assert.deepEqual(validateAnalysis(partial),partial);
+  assert.ok(!getFocusAreas(quiz,partial).some(item=>item.key==='shine'));
+  assert.equal(compareAnalyses(partial,analysis())[0].change,'not sure');
+  partial.concerns[0].confidence='high';assert.equal(validateAnalysis(partial),null);
+});
+test('a completely uncertain face yields gentle essentials without a new active',()=>{
+  const uncertain=analysis();for(const concern of uncertain.concerns){concern.level=null;concern.confidence='low';concern.zones=[];}
+  const plan=buildRoutine(quiz,uncertain);assert.equal(plan.focusAreas.length,0);assert.ok(plan.am.some(step=>step.key==='sunscreen'));assert.ok(!plan.products.some(product=>product.hasActive));
+});
+
 test('an explicitly empty catalogue never restores seed product recommendations',()=>{
   const plan=buildRoutine(quiz,null,[],[]);assert.equal(plan.products.length,0);
   assert.ok(plan.am.some(step=>step.key==='sunscreen'));assert.ok(plan.am.every(step=>step.product===null));

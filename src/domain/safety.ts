@@ -28,8 +28,9 @@ export function validateAnalysis(raw: unknown): SkinAnalysis | null {
   for (const concern of raw.concerns) {
     if (!object(concern) || !exactKeys(concern, ['key', 'level', 'confidence', 'zones', 'note'])) return null;
     if (!CONCERN_KEYS.includes(concern.key as typeof CONCERN_KEYS[number]) || keys.has(String(concern.key))) return null;
-    if (!Number.isInteger(concern.level) || Number(concern.level) < 0 || Number(concern.level) > 3) return null;
+    if (concern.level !== null && (!Number.isInteger(concern.level) || Number(concern.level) < 0 || Number(concern.level) > 3)) return null;
     if (!['low', 'medium', 'high'].includes(String(concern.confidence))) return null;
+    if (concern.level === null && (concern.confidence !== 'low' || !Array.isArray(concern.zones) || concern.zones.length !== 0)) return null;
     if (!Array.isArray(concern.zones) || concern.zones.length > ZONES.length || !concern.zones.every(zone => ZONES.includes(String(zone)))) return null;
     if (new Set(concern.zones).size !== concern.zones.length) return null;
     if (!boundedString(concern.note, 160) || concern.note.trim().split(/\s+/).length > 20 || containsForbiddenLanguage(concern.note)) return null;
