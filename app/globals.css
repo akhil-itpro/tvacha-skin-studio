@@ -16,7 +16,12 @@
   --mono: "IBM Plex Mono", monospace;
 }
 
-.label-confidence-key { padding: 10px 17px 0; font-size: 8px; text-align: right; color: var(--ink-soft); }
+.label-confidence-key {
+  padding: 10px 17px 0;
+  font-size: 8px;
+  text-align: right;
+  color: var(--ink-soft);
+}
 * {
   box-sizing: border-box;
 }
@@ -2411,6 +2416,12 @@ strong {
 }
 @media (max-width: 760px) {
   .sidebar {
+    visibility: hidden;
+  }
+  .sidebar.is-open {
+    visibility: visible;
+  }
+  .sidebar {
     left: -240px;
     width: 224px;
     transition: left 0.2s;
@@ -3058,16 +3069,46 @@ strong {
 }
 
 @media (max-width: 760px) {
-  .status-pill { display: none; }
-  .eyebrow, .check-flow > .eyebrow { font-size: 9px; }
-  .section-tag { font-size: 8px; }
-  .hero-foot > span { font-size: 9px; }
-  .affiliate-note { font-size: 10px; line-height: 1.5; }
-  .product-details .button { font-size: 11px; }
-  .product-details > p { font-size: 11px; }
-  .confidence { font-size: 9px; width: 37px; }
-  .sample-note { font-size: 8px; }
-  .skin-label-footer { font-size: 8px; flex-wrap: wrap; }
-  .routine-preview-bottom .mono { font-size: 8px; }
-  .flow-top > .mono { font-size: 8px; max-width: 170px; text-align: right; }
+  .status-pill {
+    display: none;
+  }
+  .eyebrow,
+  .check-flow > .eyebrow {
+    font-size: 9px;
+  }
+  .section-tag {
+    font-size: 8px;
+  }
+  .hero-foot > span {
+    font-size: 9px;
+  }
+  .affiliate-note {
+    font-size: 10px;
+    line-height: 1.5;
+  }
+  .product-details .button {
+    font-size: 11px;
+  }
+  .product-details > p {
+    font-size: 11px;
+  }
+  .confidence {
+    font-size: 9px;
+    width: 37px;
+  }
+  .sample-note {
+    font-size: 8px;
+  }
+  .skin-label-footer {
+    font-size: 8px;
+    flex-wrap: wrap;
+  }
+  .routine-preview-bottom .mono {
+    font-size: 8px;
+  }
+  .flow-top > .mono {
+    font-size: 8px;
+    max-width: 170px;
+    text-align: right;
+  }
 }

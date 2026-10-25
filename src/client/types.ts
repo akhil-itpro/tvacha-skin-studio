@@ -31,7 +31,13 @@ export type AppState = {
   photos: { id: string; scanId: string; createdAt: string }[];
   waitlist: boolean;
   isAdmin: boolean;
-  services: { photoAnalysis: boolean; photoStorage: boolean };
+  services: {
+    photoAnalysis: boolean;
+    photoStorage: boolean;
+    photoProvider?: string;
+    photoModel?: string;
+    photoAnalysisReason?: string;
+  };
 };
 export const dateKey = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(
@@ -46,29 +52,73 @@ export const prettyDate = (d: string) =>
 export const money = (n: number) => "₹" + n.toLocaleString("en-IN");
 export const errorMessage = (e: unknown) =>
   e instanceof Error ? e.message : "Something went wrong. Please try again.";
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+export function canUseQuizFallback(error: unknown): boolean {
+  return error instanceof ApiError
+    ? error.status >= 500
+    : error instanceof TypeError ||
+        (error instanceof DOMException && error.name === "TimeoutError");
+}
 export async function api<T = any>(
   url: string,
   method = "GET",
   body?: unknown,
+  options: { signal?: AbortSignal } = {},
 ): Promise<T> {
-  const r = await fetch(url, {
-    method,
-    credentials: "same-origin",
-    signal: AbortSignal.timeout(30000),
-    headers: body ? { "Content-Type": "application/json" } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  let d: any;
+  // Basic AbortController also works on older iPhones without AbortSignal.any/timeout.
+  const controller = new AbortController();
+  let timedOut = false;
+  const abort = () => controller.abort();
+  options.signal?.addEventListener("abort", abort, { once: true });
+  if (options.signal?.aborted) abort();
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, 30000);
   try {
-    d = await r.json();
-  } catch {
-    throw new Error(
-      "Could not reach Tvacha. Check your connection and try again.",
-    );
+    const r = await fetch(url, {
+      method,
+      credentials: "same-origin",
+      signal: controller.signal,
+      headers: body ? { "Content-Type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    let d: any;
+    try {
+      d = await r.json();
+    } catch {
+      if (controller.signal.aborted)
+        throw new DOMException("Request cancelled", "AbortError");
+      throw new ApiError(
+        r.status === 401 || r.status === 403
+          ? "Your session needs attention. Sign in again, then retry."
+          : "Could not read the server response. Please try again.",
+        r.ok ? 502 : r.status,
+      );
+    }
+    if (!r.ok)
+      throw new ApiError(
+        d.error || d.message || "This could not be saved. Please try again.",
+        r.status,
+      );
+    return d;
+  } catch (error) {
+    if (timedOut)
+      throw new DOMException(
+        "The request took too long. Please try again.",
+        "TimeoutError",
+      );
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    options.signal?.removeEventListener("abort", abort);
   }
-  if (!r.ok)
-    throw new Error(
-      d.error || d.message || "This could not be saved. Please try again.",
-    );
-  return d;
 }

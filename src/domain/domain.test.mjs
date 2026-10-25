@@ -18,6 +18,24 @@ const { buildRoutine, compareAnalyses, getFocusAreas, daysUntilRescan } = await 
 const quiz = { skinFeel: 'combination', mainConcern: 'shine', budget: '400to800', sensitivities: ['none'], redFlags: [] };
 const analysis = () => ({ image_ok: true, retake_reasons: [], concerns: CONCERN_KEYS.map((key, i) => ({ key, level: i % 4, confidence: 'medium', zones: ['cheeks'], note: 'Visible in this photo. Light can change the estimate.' })) });
 
+test('an explicitly empty catalogue never restores seed product recommendations',()=>{
+  const plan=buildRoutine(quiz,null,[],[]);assert.equal(plan.products.length,0);
+  assert.ok(plan.am.some(step=>step.key==='sunscreen'));assert.ok(plan.am.every(step=>step.product===null));
+});
+test('owned product matching tries a suitable second item after an unsuitable first one',()=>{
+  const good=PRODUCTS.find(product=>product.step==='moisturiser'&&product.fragranceFree&&product.skinTypes.includes('combination'));
+  const bad={...good,id:'fixture-fragranced',name:'Fragranced fixture',fragranceFree:false};
+  const shelf=[{id:'first',name:bad.name,step:'moisturiser',productId:bad.id},{id:'second',name:good.name,step:'moisturiser',productId:good.id}];
+  const plan=buildRoutine({...quiz,sensitivities:['fragrance']},null,shelf,[bad,...PRODUCTS]);
+  assert.equal(plan.am.find(step=>step.key==='moisturiser').ownedName,good.name);
+});
+test('a custom product is not assumed fragrance-free or pregnancy-compatible',()=>{
+  const shelf=[{id:'custom',name:'Unverified favourite',step:'moisturiser',hasActive:false}];
+  for(const sensitivities of [['fragrance'],['pregnant']]){
+    const plan=buildRoutine({...quiz,sensitivities},null,shelf);assert.equal(plan.am.find(step=>step.key==='moisturiser').owned,false);
+  }
+});
+
 test('catalogue has 24 unique real products, complete safe fields and valid sources', () => {
   assert.equal(PRODUCTS.length, 24);
   assert.equal(new Set(PRODUCTS.map(item => item.id)).size, PRODUCTS.length);

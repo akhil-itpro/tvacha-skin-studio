@@ -1,6 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isSameOrigin, quizSchema, productSchema, safeProductUrl, validateImage } from './validation.ts';
+import { isSameOrigin, quizSchema, productSchema, safeProductUrl, validateImage, validRoutineDate } from './validation.ts';
+
+test('routine dates reject impossible calendar dates and future check-ins using India time',()=>{
+  const now=new Date('2026-10-24T20:00:00Z');
+  assert.equal(validRoutineDate('2026-10-25',now),true);
+  assert.equal(validRoutineDate('2026-10-26',now),false);
+  assert.equal(validRoutineDate('2026-02-30',now),false);
+  assert.equal(validRoutineDate('2026-13-01',now),false);
+  assert.equal(validRoutineDate('2024-10-25',now),false);
+});
+test('duplicate sensitivities cannot bypass quiz validation',()=>{
+  assert.equal(quizSchema.safeParse({skinFeel:'dry',mainConcern:'dryness',budget:'under400',sensitivities:['fragrance','fragrance']}).success,false);
+});
 
 test('mutation origin checks reject cross-site and absent origins', () => {
   const req=(origin)=>new Request('https://tvacha.example/api/profile',{headers:origin?{origin}:{}});

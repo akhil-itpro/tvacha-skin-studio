@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -13,7 +13,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import type { AppState, Scan } from "../../src/client/types";
-import { api, errorMessage } from "../../src/client/types";
+import { api, errorMessage, canUseQuizFallback } from "../../src/client/types";
 import { CONCERN_META } from "../../src/domain/catalog";
 import { CONCERN_KEYS, type QuizAnswers } from "../../src/domain/types";
 import CameraCapture from "./CameraCapture";
@@ -50,19 +50,36 @@ export default function CheckFlow({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [progress, setProgress] = useState(0);
+  const active = useRef(true);
+  const analysisAbort = useRef<AbortController | null>(null);
   useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "instant" });
+    const heading = document.querySelector<HTMLElement>(
+      ".check-flow h1, .check-flow h2",
+    );
+    heading?.setAttribute("tabindex", "-1");
+    heading?.focus({ preventScroll: true });
+  }, [stage]);
+  useEffect(() => {
+    active.current = true;
     api("/api/events", "POST", { name: "check_started" }).catch(() => {});
+    return () => {
+      active.current = false;
+      analysisAbort.current?.abort();
+    };
   }, []);
   async function saveAge() {
     setBusy(true);
     setErr("");
     try {
       await api("/api/profile", "POST", { ageConfirmed: true });
-      const ref = sessionStorage.getItem("tvacha-ref");
-      if (ref) {
-        await api("/api/invite", "POST", { ref }).catch(() => {});
-        sessionStorage.removeItem("tvacha-ref");
-      }
+      try {
+        const ref = sessionStorage.getItem("tvacha-ref");
+        if (ref) {
+          await api("/api/invite", "POST", { ref }).catch(() => {});
+          sessionStorage.removeItem("tvacha-ref");
+        }
+      } catch {}
       setStage(1);
     } catch (e) {
       setErr(errorMessage(e));
@@ -76,9 +93,8 @@ export default function CheckFlow({
     try {
       await api("/api/consents", "POST", {
         analysis: analysisConsent,
-        // A per-check choice must never erase photos saved under an earlier consent.
-        // Withdrawal and deletion remain an explicit action in My account.
-        progressPhotos: photoConsent || !!state?.consents.progressPhotos,
+        // No new grant means preserve the server's current choice, never a stale browser copy.
+        ...(photoConsent ? { progressPhotos: true } : {}),
       });
       setStage(2);
     } catch (e) {
@@ -95,9 +111,9 @@ export default function CheckFlow({
         ageConfirmed: true,
         quiz: { ...quiz, redFlags: flags },
       });
-      await api("/api/events", "POST", { name: "quiz_done" });
+      api("/api/events", "POST", { name: "quiz_done" }).catch(() => {});
+      await refresh();
       if (flags.length) {
-        await refresh();
         setStage(10);
       } else setStage(7);
     } catch (e) {
@@ -107,6 +123,9 @@ export default function CheckFlow({
     }
   }
   async function analyse(mode: "photo" | "quiz", photo?: string) {
+    if (busy || flags.length || !noneFlags) return;
+    const controller = new AbortController();
+    analysisAbort.current = controller;
     setBusy(true);
     setErr("");
     setStage(9);
@@ -115,13 +134,19 @@ export default function CheckFlow({
       () => setProgress((p) => Math.min(p + 1, 3)),
       2100,
     );
-    const q = { ...quiz, redFlags: [] };
+    const q = { ...quiz, redFlags: [...flags] };
     try {
-      const d = await api("/api/analyse", "POST", {
-        quiz: q,
-        mode,
-        image: photo,
-      });
+      const d = await api(
+        "/api/analyse",
+        "POST",
+        {
+          quiz: q,
+          mode,
+          image: photo,
+        },
+        { signal: controller.signal },
+      );
+      if (!active.current || controller.signal.aborted) return;
       if (d.retake) {
         setErr(d.message || "Please try a clearer photo, facing a window.");
         setStage(8);
@@ -134,15 +159,26 @@ export default function CheckFlow({
         d.scan?.source === "photo"
       ) {
         try {
-          await api("/api/photos", "POST", { scanId: d.scan.id, image: photo });
+          await api(
+            "/api/photos",
+            "POST",
+            { scanId: d.scan.id, image: photo },
+            { signal: controller.signal },
+          );
         } catch {
           notify(
             "Your label was saved, but your progress photo could not be saved.",
           );
         }
       }
-      onFinish(d.scan);
+      if (active.current && !controller.signal.aborted) onFinish(d.scan);
     } catch (e) {
+      if (!active.current || controller.signal.aborted) return;
+      if (!canUseQuizFallback(e)) {
+        setErr(errorMessage(e));
+        setStage(7);
+        return;
+      }
       const fallback: Scan = {
         id: "offline-" + crypto.randomUUID(),
         createdAt: new Date().toISOString(),
@@ -156,7 +192,7 @@ export default function CheckFlow({
       onFinish(fallback);
     } finally {
       clearInterval(timer);
-      setBusy(false);
+      if (active.current) setBusy(false);
     }
   }
   const questions = [
@@ -306,9 +342,10 @@ export default function CheckFlow({
             <div>
               <strong>Photos aren’t saved by default.</strong>
               <p>
-                A photo is sent securely to the configured AI provider only for
-                analysis. You can use the quiz without a selfie. See our draft
-                privacy notice for provider processing.
+                A photo is sent securely to{" "}
+                {state?.services.photoProvider || "the configured AI provider"}{" "}
+                only for analysis. You can use the quiz without a selfie. See
+                our draft privacy notice for provider processing.
               </p>
             </div>
           </div>
@@ -337,18 +374,25 @@ export default function CheckFlow({
                   ? "Optional. Private and deletable, one by one."
                   : "Photo storage is not connected yet. Photos won’t be saved."}
               </small>
-              {state?.consents.progressPhotos && <small>Earlier saved photos stay private. Withdraw consent and delete them in My account.</small>}
+              {state?.consents.progressPhotos && (
+                <small>
+                  Earlier saved photos stay private. Withdraw consent and delete
+                  them in My account.
+                </small>
+              )}
             </span>
           </label>
           <p className="fine-print">
             Download or delete your data in My account. Withdraw photo consent
             any time.{" "}
-            <button
+            <a
               className="inline-link"
-              onClick={() => navigate("/privacy")}
+              href="/privacy"
+              target="_blank"
+              rel="noopener noreferrer"
             >
               Read the draft privacy notice
-            </button>
+            </a>
             .
           </p>
           <button className="button full" disabled={busy} onClick={saveConsent}>
@@ -494,8 +538,9 @@ export default function CheckFlow({
             <div className="alert">
               <Info size={18} />
               <p>
-                Photo analysis isn’t connected yet. Your quiz-based routine is
-                ready to build.
+                {state?.services.photoAnalysisReason ||
+                  "Photo analysis isn’t connected yet."}{" "}
+                Your quiz-based routine is ready to build.
               </p>
             </div>
           )}

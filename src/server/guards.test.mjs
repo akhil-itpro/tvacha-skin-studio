@@ -1,7 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { INSERT_SCAN_GUARDED, INSERT_EVENT_FOR_SCAN, PROFILE_GENERATION_EXISTS } from './guards.ts';
+import { INSERT_SCAN_GUARDED, INSERT_EVENT_FOR_SCAN, PROFILE_GENERATION_EXISTS, CLOSE_PROFILE, UPSERT_PROFILE } from './guards.ts';
+
+test('account deletion closes uploads before storage work and age confirmation cannot reopen it',()=>{
+  const {db,save}=setup();db.exec('ALTER TABLE profiles ADD COLUMN quiz_json TEXT');
+  assert.equal(db.prepare(CLOSE_PROFILE).run('user:a').changes,1);
+  assert.equal(save(),0);
+  assert.equal(db.prepare(UPSERT_PROFILE).run('user:a','new-epoch','{}').changes,0);
+  assert.equal(db.prepare('SELECT age_confirmed FROM profiles').get().age_confirmed,0);
+  db.exec('DELETE FROM profiles');
+  assert.equal(db.prepare(UPSERT_PROFILE).run('user:a','new-epoch','{}').changes,1);
+  assert.equal(save('user:a','epoch-a'),0);db.close();
+});
 
 function setup() {
   const db=new DatabaseSync(':memory:');

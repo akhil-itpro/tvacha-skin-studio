@@ -9,7 +9,7 @@ Tvacha gives cosmetic guidance, not a diagnosis. The UI calls out uncertainty an
 - Responsive overview and Check, Routine, Shelf, Progress and account screens, with an accessible mobile navigation and a complete `/styleguide`.
 - Age gate, two separate unticked consent choices, four-question quiz, and a symptom check that stops the scan and product flow when any red flag is selected.
 - Front-camera capture, mirrored preview, on-device single-face/position/light/sharpness checks, JPEG resize, photo confirmation and upload fallback. The original photo stays in memory unless the user separately chooses to save it.
-- Server-only Gemini integration with bounded requests, strict JSON validation, one retry and prohibited-language checks. Provider failure or missing configuration gives a clearly labelled quiz routine with no photo scores.
+- Server-only Groq image analysis with explicit zero-data-retention configuration, bounded requests, strict JSON validation, one retry and prohibited-language checks. Optional Gemini integration requires paid-service data protections. Provider failure or missing configuration gives a clearly labelled quiz routine with no photo scores.
 - A printed Skin Label for valid photo results, confidence per concern, up to three focus areas, AM/PM routines and ingredient guidance.
 - 24 real products from three official brand catalogues. Prices are dated reference list prices, not a live price feed. Product selection is code, never AI or commission-based ranking. Budget, fragrance, pregnancy cautions, shelf coverage, sunscreen and one-new-active limits are enforced.
 - Saved labels, daily routine ticks, gentle weekly progress, shelf search/free-text entry, comparisons and weekly rescan reminders.
@@ -24,7 +24,7 @@ Read [BACKEND.md](./BACKEND.md) for exact API contracts, ownership rules, quota 
 
 This app uses **Sites + Cloudflare**, rather than Lovable Cloud. Hosting owns **Sign in with ChatGPT**; there is no pretend email-OTP form. D1 is server-only SQLite: private data access is enforced through the server's authenticated owner ID, not PostgreSQL row-level-security policies. Do not claim PostgreSQL RLS is enabled.
 
-The server calls Gemini directly. Lovable AI credits and Lovable app-context settings do not apply. The pack names Gemini 3.8 Flash; the default model string is configurable. Enable a model available to your Google account before testing live scans. Photo AI has no fabricated demo response.
+The hosted app now uses the Groq Free plan with `qwen/qwen3.8-27b`. Its inference zero-data-retention control was enabled and the key/model connection and a synthetic-image retake request were verified on 25 October 2026. No paid plan was enabled. Lovable credits do not apply. Photo AI has no fabricated demo response. Rate limits still apply, and real-person photo quality is not established by a synthetic-image test.
 
 The supplied pack deliberately gates payments on business, KYC and legal prerequisites. This build keeps Pro as a waitlist and does not charge visitors.
 
@@ -70,20 +70,28 @@ The local development sign-in route `/signin-with-chatgpt?return_to=/me` uses th
 Create an ignored `.dev.vars` file for local secrets:
 
 ```dotenv
-GEMINI_API_KEY=your_server_only_google_key
-GEMINI_MODEL=gemini-3.8-flash
+PHOTO_AI_PROVIDER=groq
+GROQ_API_KEY=your_server_only_groq_key
+GROQ_MODEL=qwen/qwen3.8-27b
+GROQ_ZDR_ENABLED=true
 ADMIN_USER_IDS=user:your_site_scoped_user_id
 ```
 
 Use the native Sites runtime environment/secrets controls for production. Never commit keys or add them to `public/`, browser code, `.openai/hosting.json`, screenshots or logs. Restart local development after changing `.dev.vars`; redeploy after changing production runtime settings.
 
-`GEMINI_API_KEY` is optional. Without it the complete quiz-to-routine experience works, and the UI states that photo analysis is not connected. `GET /api/state` exposes availability booleans, never the secret. A model error, invalid result or exhausted quota gives the quiz fallback.
+Keep the account on its Free plan. First enable **Inference APIs ZDR** at the [Groq Data Controls page](https://console.groq.com/settings/data-controls); set `GROQ_ZDR_ENABLED=true` only after verifying that control. The hosted secret is already configured; real keys are never committed or copied into local source. If you change Groq's retention setting later, disable photo analysis until it is restored.
+
+Google's [unpaid Gemini terms](https://ai.google.dev/gemini-api/terms) prohibit personal or sensitive information. For a Gemini alternative, use a project with paid-service data protections and set `GEMINI_DATA_POLICY=paid`; the unpaid Gemini API is not enabled for selfies. The Free-plan Groq connection avoids this requirement.
+
+Without a ready provider the quiz-to-routine experience works, and the UI states that photo analysis is not connected. `GET /api/state` exposes provider availability/model information, never the secret. A model error, invalid result or exhausted quota gives the quiz fallback. Session, consent, and validation rejections are shown as errors instead of bypassed through an offline routine.
 
 Bindings in `.openai/hosting.json` are D1 `DB` and private R2 `BUCKET`. Hosted Sites provisions these bindings and applies tracked migrations on publication. Production and local data are independent.
 
 Photo scanning reserves one attempt per guest identity/day or three per signed-in account/day, subject to the global daily cap, initially 20. Failed provider attempts count toward cost protection. Guests are identified by an HttpOnly cookie; clearing cookies creates a new guest identity, while the global cost cap still applies. The quota day uses UTC.
 
 ## Give your account founder access
+
+The hosted owner's trusted sign-in email is now explicitly configured in the server-only `ADMIN_EMAILS` allowlist. Sign in using that account to access `/admin`. No visitor can claim the role through a client request.
 
 1. Sign in to the hosted app and open `/api/state` while signed in.
 2. Copy your own `user.id`, including its `user:` prefix.
@@ -103,7 +111,7 @@ node node_modules/typescript/bin/tsc --noEmit
 node scripts/run-framework.mjs build
 ```
 
-The domain suite checks catalogue integrity, strict six-concern JSON, restricted output, uncertainty, symptom stops, all 72 base skin/concern/budget combinations, shelf coverage, pregnancy/fragrance restrictions, budget gaps, one active, progress comparison and rescan timing. The backend suite checks real quota SQL, same-origin requests, safe store redirects, input/upload validation and cost caps.
+Run `npm test` for all 53 unit/regression checks. The six HTTP integration checks run against the local database/storage with `TVACHA_TEST_URL` and `TVACHA_ADMIN_TEST=1`, as documented in BACKEND.md. The suite checks catalogue integrity, strict six-concern JSON, restricted output, uncertainty, symptom stops, budget/sensitivity combinations, safe shelf matching, date validity, provider retries, bounded responses, data policy gates, deletion barriers, quotas, private photos and sign-in migration.
 
 Unit tests do not establish clinical accuracy, real-provider latency, deployed account isolation or real-device camera quality. See the task's verification report for checks actually completed. Re-run relevant tests when changing safety rules, data ownership, consent or product selection.
 

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -35,7 +35,8 @@ import { Routine, Shelf, Progress } from "./WorkspaceViews";
 import { Result, Account, Pro, Legal } from "./MoreViews";
 import Styleguide from "./Styleguide";
 import Admin from "./AdminDashboard";
-export const DEFAULT_QUIZ: QuizAnswers = {
+import { useDialog } from "../../src/client/useDialog";
+const DEFAULT_QUIZ: QuizAnswers = {
   skinFeel: "combination",
   mainConcern: "shine",
   budget: "400to800",
@@ -50,41 +51,70 @@ export default function TvachaApp() {
   const [toast, setToast] = useState("");
   const [menu, setMenu] = useState(false);
   const [scan, setScan] = useState<Scan | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [labelError, setLabelError] = useState("");
   const [showInstall, setShowInstall] = useState(false);
   const [installEvent, setInstallEvent] = useState<any>(null);
   const [dialog, setDialog] = useState<"delete" | "withdraw" | null>(null);
   const [busy, setBusy] = useState(false);
+  const dialogRef = useDialog(!!dialog, () => {
+    if (!busy) setDialog(null);
+  });
+  const stateRequest = useRef(0);
+  const stateAbort = useRef<AbortController | null>(null);
+  const navigationVersion = useRef(0);
   const notify = (s: string) => setToast(s);
   async function refresh() {
+    const request = ++stateRequest.current;
+    stateAbort.current?.abort();
+    const controller = new AbortController();
+    stateAbort.current = controller;
     try {
-      const s = await api<AppState>("/api/state");
+      const s = await api<AppState>("/api/state", "GET", undefined, {
+        signal: controller.signal,
+      });
+      if (request !== stateRequest.current || controller.signal.aborted)
+        return null;
       setState(s);
       setLoadError("");
       return s;
     } catch (e) {
+      if (request !== stateRequest.current || controller.signal.aborted)
+        return null;
       setLoadError(errorMessage(e));
       return null;
     } finally {
-      setLoading(false);
+      if (request === stateRequest.current) setLoading(false);
     }
   }
   function navigate(p: string) {
+    ++navigationVersion.current;
     window.history.pushState({}, "", p);
     setPath(p.split("?")[0]);
+    const id = new URL(p, location.origin).searchParams.get("scan");
+    setSelectedId(id);
+    setLabelError("");
+    if (p.split("?")[0] === "/label" && !id) setScan(null);
     setMenu(false);
     window.scrollTo({ top: 0, behavior: "instant" });
   }
   useEffect(() => {
     setPath(location.pathname);
+    setSelectedId(new URLSearchParams(location.search).get("scan"));
     const pop = () => {
+      ++navigationVersion.current;
       setPath(location.pathname);
+      setSelectedId(new URLSearchParams(location.search).get("scan"));
+      setLabelError("");
       setMenu(false);
     };
     window.addEventListener("popstate", pop);
     refresh();
     const ref = new URLSearchParams(location.search).get("ref");
-    if (ref && /^[a-f0-9]{16}$/.test(ref))
-      sessionStorage.setItem("tvacha-ref", ref);
+    try {
+      if (ref && /^[a-f0-9]{16}$/.test(ref))
+        sessionStorage.setItem("tvacha-ref", ref);
+    } catch {}
     const installed = (e: Event) => {
       e.preventDefault();
       setInstallEvent(e);
@@ -100,6 +130,8 @@ export default function TvachaApp() {
     if ("serviceWorker" in navigator)
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     return () => {
+      ++stateRequest.current;
+      stateAbort.current?.abort();
       window.removeEventListener("popstate", pop);
       window.removeEventListener("beforeinstallprompt", installed);
     };
@@ -110,15 +142,55 @@ export default function TvachaApp() {
       return () => clearTimeout(t);
     }
   }, [toast]);
+  useEffect(() => {
+    if (
+      path !== "/label" ||
+      !selectedId ||
+      loading ||
+      !state ||
+      scan?.id === selectedId
+    )
+      return;
+    const existing = state.scans.find((item) => item.id === selectedId);
+    if (existing) {
+      setScan(existing);
+      return;
+    }
+    const controller = new AbortController();
+    setLabelError("");
+    if (selectedId.startsWith("offline-")) {
+      setLabelError(
+        "This routine was available for one offline visit and was not saved. Start a new check to save a label.",
+      );
+      return;
+    }
+    api<{ scans: Scan[] }>(
+      "/api/scans?id=" + encodeURIComponent(selectedId),
+      "GET",
+      undefined,
+      { signal: controller.signal },
+    )
+      .then((result) => {
+        if (!controller.signal.aborted) setScan(result.scans[0] || null);
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) setLabelError(errorMessage(error));
+      });
+    return () => controller.abort();
+  }, [path, selectedId, loading, state?.user.id]);
   const latest =
-    (path === "/label" || scan?.id.startsWith("offline-") ? scan : null) ||
-    state?.scans[0] ||
-    null;
+    path === "/label" && selectedId
+      ? scan?.id === selectedId
+        ? scan
+        : state?.scans.find((item) => item.id === selectedId) || null
+      : (path === "/label" || scan?.id.startsWith("offline-") ? scan : null) ||
+        state?.scans[0] ||
+        null;
   const redFlagged = !!state?.profile?.quiz?.redFlags?.length;
   const quiz = redFlagged
     ? state!.profile!.quiz!
     : latest?.quiz || state?.profile?.quiz || DEFAULT_QUIZ;
-  const products = state?.products?.length ? state.products : PRODUCTS;
+  const products = state ? state.products : PRODUCTS;
   const plan = buildRoutine(
     quiz,
     latest?.analysis || null,
@@ -166,7 +238,7 @@ export default function TvachaApp() {
       <a className="skip-link" href="#main">
         Skip to content
       </a>
-      <aside className={"sidebar " + (menu ? "is-open" : "")}>
+      <aside id="sidebar" className={"sidebar " + (menu ? "is-open" : "")}>
         <a
           href="/"
           className="brand-link"
@@ -244,6 +316,8 @@ export default function TvachaApp() {
             <button
               className="icon-button"
               aria-label="Open menu"
+              aria-expanded={menu}
+              aria-controls="sidebar"
               onClick={() => setMenu(true)}
             >
               <Menu size={22} />
@@ -265,7 +339,8 @@ export default function TvachaApp() {
               aria-label="Open my account"
               onClick={() => navigate("/me")}
             >
-              {(!state?.user.isGuest && state?.user.name?.slice(0, 1).toUpperCase()) || (
+              {(!state?.user.isGuest &&
+                state?.user.name?.slice(0, 1).toUpperCase()) || (
                 <UserRound size={18} />
               )}
             </button>
@@ -315,9 +390,14 @@ export default function TvachaApp() {
                   notify={notify}
                   navigate={navigate}
                   onFinish={async (s) => {
+                    const version = navigationVersion.current;
                     setScan(s);
                     await refresh();
-                    navigate("/label");
+                    if (
+                      version === navigationVersion.current &&
+                      location.pathname === "/check"
+                    )
+                      navigate("/label?scan=" + encodeURIComponent(s.id));
                   }}
                 />
               )}
@@ -329,6 +409,19 @@ export default function TvachaApp() {
                     text="You reported symptoms that need an in-person assessment. We’ve paused product recommendations."
                     action="Review my skin check"
                     onAction={goCheck}
+                  />
+                ) : selectedId && !latest && !labelError ? (
+                  <div className="page-loading" role="status">
+                    <LoaderCircle className="spin" />
+                    Opening your saved label…
+                  </div>
+                ) : labelError ? (
+                  <Empty
+                    Icon={ScanFace}
+                    title="This label couldn’t be opened."
+                    text={labelError}
+                    action="My progress"
+                    onAction={() => navigate("/progress")}
                   />
                 ) : latest ? (
                   <Result
@@ -380,7 +473,7 @@ export default function TvachaApp() {
                   state={state}
                   onSelect={(s) => {
                     setScan(s);
-                    navigate("/label");
+                    navigate("/label?scan=" + encodeURIComponent(s.id));
                   }}
                   goCheck={goCheck}
                   notify={notify}
@@ -530,6 +623,7 @@ export default function TvachaApp() {
       {dialog && (
         <div className="modal-overlay">
           <section
+            ref={dialogRef}
             className="modal"
             role="dialog"
             aria-modal="true"

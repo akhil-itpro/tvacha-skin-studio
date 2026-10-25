@@ -559,7 +559,7 @@ export function Legal({
           ? "Your data, in plain words."
           : "A few ground rules."}
       </h1>
-      <p className="mono">LAST UPDATED / 24 OCTOBER 2026 · VERSION 1.0</p>
+      <p className="mono">LAST UPDATED / 25 OCTOBER 2026 · VERSION 1.1</p>
       {type === "privacy" ? (
         <>
           <h2>What Tvacha collects</h2>
@@ -576,9 +576,12 @@ export function Legal({
             With your separate consent, your image is sent over HTTPS to the
             configured AI provider to estimate visible cosmetic concerns. Tvacha
             does not save the selfie by default or include it in application
-            logs. The AI provider may process and retain requests under its own
-            terms; its terms and retention settings must be reviewed before
-            public launch. We cannot promise zero provider retention.
+            logs. Photo processing uses Groq with inference zero data retention
+            enabled for this app’s account. Groq still collects usage metadata,
+            which does not include image inputs or generated responses.
+            Processing remains subject to its terms and legal obligations. An
+            alternative Google Gemini configuration requires paid-service data
+            protections; the unpaid tier is not used for selfies.
           </p>
           <h2>Progress photos are your choice</h2>
           <p>

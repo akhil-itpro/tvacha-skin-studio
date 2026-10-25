@@ -5,8 +5,9 @@ Tvacha runs as a Vinext application on Cloudflare Workers. Sites provides deploy
 ## Connected and unconnected services
 
 - The quiz routine, catalogue, labels, saved history, ticks, shelf, consent ledger, export, deletion, waitlist, referrals, and founder APIs use the real database.
-- Photo estimates need a server-only `GEMINI_API_KEY`. Without it, `/api/analyse` saves an explicitly labelled quiz routine with `analysis: null`. It never returns invented concern scores. `GET /api/state` exposes only the boolean service availability.
-- `GEMINI_MODEL` defaults to `gemini-3.8-flash`. The server calls Google's HTTPS API directly; Lovable's connector and credits are not involved. Current official [image documentation](https://ai.google.dev/gemini-api/docs/image-understanding) and [structured-output documentation](https://ai.google.dev/gemini-api/docs/generate-content/structured-output) were checked on 24 October 2026.
+- The hosted app uses server-only `GROQ_API_KEY`, `PHOTO_AI_PROVIDER=groq`, `GROQ_MODEL=qwen/qwen3.8-27b` and `GROQ_ZDR_ENABLED=true`. Its account was verified on the Free plan and Inference APIs ZDR enabled on 25 October 2026. The actual model endpoint accepted the key and returned a valid retake response for a synthetic, faceless image. No payment method or upgrade was added.
+- Groq's [vision documentation](https://console.groq.com/docs/vision), [free limits](https://console.groq.com/docs/rate-limits) and [data controls](https://console.groq.com/docs/your-data) were checked. Retention controls must remain enabled in the provider account; the environment flag records the operator's verified setup and cannot independently detect a later console change.
+- Optional `GEMINI_MODEL` defaults to `gemini-3.8-flash`, but a configured key is insufficient: `GEMINI_DATA_POLICY=paid` is required. [Google's unpaid terms](https://ai.google.dev/gemini-api/terms) prohibit personal information, so its unpaid API is not used for selfies. No automatic provider failover occurs.
 - Progress photos require both the separate opt-in and the R2 binding. Storage is private and every read/delete checks owner identity. An unavailable bucket never silently stores photos elsewhere.
 - Sign-in is the hosting platform's **Sign in with ChatGPT**, not the prompt pack's email OTP. The documented Sites runtime owns its authentication routes; do not replace them with a mock OTP form.
 - Payments are intentionally absent: the pack gates payments on business, KYC and legal requirements. The waitlist accepts no payment.
@@ -19,9 +20,15 @@ Use `.dev.vars` locally and native Sites runtime secrets in production. Never pl
 
 | Name | Meaning |
 | --- | --- |
-| `GEMINI_API_KEY` | Google Gemini API secret. Optional; enables photo analysis when configured. |
+| `PHOTO_AI_PROVIDER` | `groq` (hosted free setup) or `gemini` (optional paid-data-policy setup). |
+| `GROQ_API_KEY` | Server-only Groq API secret. |
+| `GROQ_MODEL` | Defaults to `qwen/qwen3.8-27b`. |
+| `GROQ_ZDR_ENABLED` | Set `true` only after enabling Inference APIs ZDR in Groq Data Controls. |
+| `GEMINI_API_KEY` | Optional Google Gemini API secret. |
+| `GEMINI_DATA_POLICY` | Must be `paid` to enable personal photo processing with Gemini. |
 | `GEMINI_MODEL` | Optional model ID; default `gemini-3.8-flash`. |
 | `ADMIN_USER_IDS` | Comma-separated site-scoped user IDs, with or without the `user:` prefix. |
+| `ADMIN_EMAILS` | Exact email allowlist, checked only against trusted platform sign-in. The verified hosted owner is configured here. |
 
 ## Database migrations
 
@@ -57,7 +64,7 @@ All JSON mutation requests require `Content-Type: application/json` and a same-o
 | --- | --- |
 | `GET /api/state` | User, profile, current consent flags, scans, ticks, shelf, active products, photo metadata, waitlist status, admin flag, service availability, existing `inviteCode` or null. |
 | `POST /api/profile` | `{ageConfirmed:true, quiz?}`. Under-18 confirmation cannot be accepted. |
-| `POST /api/consents` | `{analysis:boolean, progressPhotos:boolean}`. Separate versioned records; withdrawing photo consent removes stored photos. |
+| `POST /api/consents` | `{analysis:boolean, progressPhotos?:boolean}`. Omit progressPhotos to preserve the current server choice. Explicit false withdraws and deletes saved photos. Analysis consent is stamped with its named provider; a provider change requires new consent. |
 | `POST /api/analyse` | `{quiz, mode:'quiz'|'photo', image?:JPEGDataURL}`; returns `{scan,routine,message}` or `{retake:true,retakeReasons,routine,message}`. |
 | `POST /api/routine` | `{date:'YYYY-MM-DD',slot:'AM'|'PM',step,done:boolean}`. |
 | `POST /api/shelf` | `{name,step,productId?,hasActive?}`; returns `{item}`. |
@@ -66,7 +73,7 @@ All JSON mutation requests require `Content-Type: application/json` and a same-o
 | `GET /api/photos?id=<uuid>` | Private JPEG with no-store headers. |
 | `POST /api/photos` | `{scanId,image:JPEGDataURL}`. Existing owned scan and current opt-in required. |
 | `DELETE /api/photos` | `{id}`. |
-| `GET /api/export` | Owned records and photo metadata as JSON. Individual JPEGs use `/api/photos`. |
+| `GET /api/export` | Owned records, own app events, and photo metadata as JSON. Individual JPEGs use `/api/photos`. |
 | `DELETE /api/account` | `{confirm:'DELETE'}`. Deletes this app's data and photos immediately; does not delete the user's ChatGPT account. |
 | `POST /api/waitlist` | `{email,price?:'49'|'99'|'199'|'wouldnt_pay',ref?}`. |
 | `GET /api/invite` | After 18+ confirmation, returns opaque `{code,signups}`. |

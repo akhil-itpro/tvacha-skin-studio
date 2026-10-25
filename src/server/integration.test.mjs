@@ -31,6 +31,9 @@ test('HTTP isolation and data lifecycle across two independent guest identities'
   assert.equal((await b('/api/consents','POST',{analysis:false,progressPhotos:false})).status,200);
   const resultA=await a('/api/analyse','POST',{quiz,mode:'quiz'});
   assert.equal(resultA.status,200);assert.equal(resultA.data.scan.analysis,null);assert.equal(resultA.data.scan.source,'quiz');
+  assert.equal((await a('/api/scans?id='+resultA.data.scan.id)).data.scans[0].id,resultA.data.scan.id);
+  assert.equal((await b('/api/scans?id='+resultA.data.scan.id)).status,404);
+  assert.equal((await a('/api/scans?id=not-an-id')).status,400);
   assert.ok(resultA.data.routine.am.some(step=>step.key==='sunscreen'));
   assert.ok(resultA.data.routine.am.length<=4);assert.ok(resultA.data.routine.pm.length<=3);
   const date=new Date().toISOString().slice(0,10);
@@ -50,7 +53,7 @@ test('HTTP isolation and data lifecycle across two independent guest identities'
   const unsafe=await a('/api/analyse','POST',{quiz:{...quiz,redFlags:['painful_lumps']},mode:'quiz'});assert.equal(unsafe.status,422);
   assert.equal((await a('/api/state')).data.scans.length,1);
   const exported=await a('/api/export');assert.equal(exported.status,200);assert.equal(exported.data.scans.length,1);assert.equal(exported.data.shelf_items.length,1);
-  assert.equal(JSON.stringify(exported.data).includes(firstB.data.user.id),false);assert.equal('events' in exported.data,false);
+  assert.equal(JSON.stringify(exported.data).includes(firstB.data.user.id),false);assert.ok(Array.isArray(exported.data.events));
   assert.equal((await a('/api/waitlist','POST',{email:'fixture-only@example.test',price:'wouldnt_pay'})).status,200);
   assert.equal((await a('/api/state')).data.waitlist,true);assert.equal((await b('/api/state')).data.waitlist,false);
   const invite=await a('/api/invite');assert.equal(invite.status,200);assert.match(invite.data.code,/^[a-f0-9]{16}$/);
@@ -85,7 +88,12 @@ test('HTTP private R2 photos require opt-in, remain owner-only and are deleted o
   assert.equal((await b('/api/photos','POST',{scanId:label.data.scan.id,image})).status,404);
   await b('/api/photos','DELETE',{id:photoId});assert.equal((await a('/api/photos?id='+photoId)).status,200);
   assert.equal((await a('/api/state')).data.photos.length,1);assert.equal((await b('/api/state')).data.photos.length,0);
+  // Choosing no new photo saving in another check preserves existing photos.
+  assert.equal((await a('/api/consents','POST',{analysis:true})).status,200);
+  assert.equal((await a('/api/photos?id='+photoId)).status,200);
   await a('/api/consents','POST',{analysis:true,progressPhotos:false});assert.equal((await a('/api/photos?id='+photoId)).status,404);assert.equal((await a('/api/state')).data.photos.length,0);
+  await a('/api/consents','POST',{analysis:true});
+  assert.equal((await a('/api/state')).data.consents.progressPhotos,false);
   const connected=(await a('/api/state')).data.services.photoAnalysis;
   if(!connected){const fallback=await a('/api/analyse','POST',{quiz,mode:'photo',image});assert.equal(fallback.status,200);assert.equal(fallback.data.scan.analysis,null);assert.equal(fallback.data.scan.source,'quiz');}
   await a('/api/account','DELETE',{confirm:'DELETE'});await b('/api/account','DELETE',{confirm:'DELETE'});
