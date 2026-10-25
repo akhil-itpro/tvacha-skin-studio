@@ -38,7 +38,7 @@ import {
 import type { Product, RoutinePlan } from "../../src/domain/types";
 import { CONCERN_KEYS } from "../../src/domain/types";
 import { CONCERN_META } from "../../src/domain/catalog";
-import { shareLabel } from "../../src/client/share";
+import { downloadBlob, shareLabel } from "../../src/client/share";
 import { PageHead, SkinLabel, Sticker, ProductCard, Empty } from "./UI";
 type Common = {
   state: AppState | null;
@@ -58,6 +58,7 @@ export function Result({
   navigate: (s: string) => void;
   notify: (s: string) => void;
 }) {
+  const [sharing, setSharing] = useState(false);
   return (
     <>
       <PageHead
@@ -67,9 +68,14 @@ export function Result({
       >
         <button
           className="button secondary"
+          disabled={sharing}
           onClick={async () => {
+            if (sharing) return;
+            setSharing(true);
             try {
               const r = await shareLabel(scan, plan);
+              if (r === "cancelled") return;
+              void api("/api/events", "POST", { name: "label_shared" }).catch(() => {});
               notify(
                 r === "shared"
                   ? "Your label was shared."
@@ -77,11 +83,11 @@ export function Result({
               );
             } catch (e) {
               notify(errorMessage(e));
-            }
+            } finally { setSharing(false); }
           }}
         >
-          <Share2 size={17} />
-          Share my label
+          {sharing ? <LoaderCircle className="spin" size={17} /> : <Share2 size={17} />}
+          {sharing ? "Preparing label…" : "Share my label"}
         </button>
       </PageHead>
       {scan.message && (
@@ -187,7 +193,7 @@ export function Result({
       {plan.products.length ? (
         <div className="products-grid">
           {plan.products.map((p) => (
-            <ProductCard key={p.id} product={p} />
+            <ProductCard key={p.id} product={p} alternatives={[...plan.am, ...plan.pm].find(step => step.product?.id === p.id)?.alternatives} />
           ))}
         </div>
       ) : (
@@ -236,18 +242,12 @@ export function Account({
 }) {
   const [working, setWorking] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [consentBusy, setConsentBusy] = useState(false);
   async function download() {
     setWorking(true);
     try {
       const data = await api("/api/export");
-      const url = URL.createObjectURL(
-        new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
-      );
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "tvacha-my-data-" + dateKey() + ".json";
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      downloadBlob(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }), "tvacha-my-data-" + dateKey() + ".json");
       notify("Your data export has been downloaded.");
     } catch (e) {
       notify(errorMessage(e));
@@ -302,7 +302,7 @@ export function Account({
           )}
           <div className="account-stats">
             <div>
-              <strong>{state?.scans.length || 0}</strong>
+              <strong>{state?.scanCount || 0}</strong>
               <span>skin notes</span>
             </div>
             <div>
@@ -312,7 +312,9 @@ export function Account({
           </div>
           <button
             className="button secondary full"
+            disabled={!state}
             onClick={async () => {
+              if (!state?.profile?.ageConfirmed) { navigate("/check"); notify("Confirm you are 18 or older in Skin check before creating an invite."); return; }
               try {
                 const invite = await api("/api/invite");
                 const url = location.origin + "/?ref=" + invite.code;
@@ -332,6 +334,7 @@ export function Account({
           <section className="section-card settings-card">
             <span className="eyebrow">YOU’RE IN CONTROL</span>
             <h2>Privacy, in plain words.</h2>
+            {!state?.profile?.ageConfirmed && <p className="fine-print">Start a skin check and confirm you are 18 or older to choose photo preferences.</p>}
             <button
               className="settings-row"
               disabled={working}
@@ -363,15 +366,15 @@ export function Account({
                 role="switch"
                 aria-checked={!!state?.consents.progressPhotos}
                 aria-label="Save progress photos"
-                disabled={!state?.services.photoStorage}
+                disabled={!state?.services.photoStorage || !state?.profile?.ageConfirmed || consentBusy}
                 onClick={async () => {
                   if (state?.consents.progressPhotos) {
                     setDialog("withdraw");
                     return;
                   }
                   try {
+                    setConsentBusy(true);
                     await api("/api/consents", "POST", {
-                      analysis: !!state?.consents.analysis,
                       progressPhotos: true,
                     });
                     await refresh();
@@ -380,12 +383,20 @@ export function Account({
                     );
                   } catch (e) {
                     notify(errorMessage(e));
-                  }
+                  } finally { setConsentBusy(false); }
                 }}
               >
                 <span />
               </button>
             </div>
+            <button className="settings-row" disabled={!state || consentBusy} onClick={async () => {
+              if (!state?.consents.analysis) { navigate("/check"); return; }
+              setConsentBusy(true);
+              try { await api("/api/consents", "POST", { analysis: false }); await refresh(); notify("Photo analysis consent withdrawn. You can still use quiz routines."); }
+              catch (error) { notify(errorMessage(error)); } finally { setConsentBusy(false); }
+            }}>
+              <ShieldCheck size={20} /><span><strong>{state?.consents.analysis ? "Withdraw photo analysis consent" : "Review photo analysis consent"}</strong><small>{state?.consents.analysis ? "Stops future photo analysis until you choose it again." : "Review the provider notice in Skin check before choosing."}</small></span><ChevronRight size={18} />
+            </button>
             <button
               className="settings-row"
               onClick={() => navigate("/privacy")}
@@ -470,6 +481,11 @@ export function Pro({ state, refresh, notify }: Common) {
           <CheckCheck size={28} />
           <h2>You’re on the list.</h2>
           <p>Thanks for helping shape what comes next.</p>
+          <button className="button secondary" disabled={busy} onClick={async () => {
+            setBusy(true);
+            try { await api("/api/waitlist", "DELETE", {}); await refresh(); notify("You’ve left the Pro waitlist."); }
+            catch (error) { notify(errorMessage(error)); } finally { setBusy(false); }
+          }}>{busy ? "Leaving…" : "Leave waitlist"}</button>
         </div>
       ) : (
         <form
@@ -523,7 +539,7 @@ export function Pro({ state, refresh, notify }: Common) {
             <span>
               <strong>I am 18 or older. Email me when Pro is ready</strong>
               <small>
-                Only updates about Pro. Delete your data to leave the list.
+                Only updates about Pro. Leave the waitlist here at any time.
               </small>
             </span>
           </label>
@@ -543,9 +559,11 @@ export function Pro({ state, refresh, notify }: Common) {
 export function Legal({
   type,
   navigate,
+  details,
 }: {
   type: "privacy" | "terms";
   navigate: (p: string) => void;
+  details?: AppState["siteDetails"];
 }) {
   return (
     <article className="legal-page">
@@ -609,9 +627,8 @@ export function Legal({
           <p>
             Skip photo analysis, refuse photo saving, withdraw consent, export
             records, or delete your data. Tvacha is for adults 18 and older.
-            Grievance contact: not yet appointed. The operator must add a real
-            contact and obtain legal review before opening the app to the
-            public.
+            Contact details appear below. The operator must appoint a grievance
+            contact and obtain legal review before opening the app to the public.
           </p>
           <h2>Infrastructure and external services</h2>
           <p>
@@ -672,6 +689,10 @@ export function Legal({
           </p>
         </>
       )}
+      <h2>Operator and support</h2>
+      <p>{details?.operatorName ? `Operated by ${details.operatorName}.` : "Operator details pending."}{" "}
+        {details?.supportEmail ? <>For support or privacy requests, contact <a href={"mailto:" + details.supportEmail}>{details.supportEmail}</a>.</> : "A support contact has not been added yet."}
+        {" "}The founder can update these details in the founder dashboard.</p>
       <div className="alert warning">
         <Info size={20} />
         <p>

@@ -1,4 +1,12 @@
 import type { RoutinePlan, SkinAnalysis } from '../domain/types';
+import { wrapLines } from './text-layout';
+
+export function downloadBlob(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a'); link.href = url; link.download = name;
+  document.body.appendChild(link); link.click(); link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}
 
 export type ShareableScan = { id: string; createdAt: string; analysis: SkinAnalysis | null };
 const CONCERNS = [
@@ -8,7 +16,7 @@ const CONCERNS = [
 ] as const;
 
 /** Produces a label-only image. This function never accepts or reads a face photo. */
-export async function shareLabel(scan: ShareableScan, plan: RoutinePlan): Promise<'shared' | 'downloaded'> {
+export async function shareLabel(scan: ShareableScan, plan: RoutinePlan): Promise<'shared' | 'downloaded' | 'cancelled'> {
   if (plan.stopped) throw new Error('A stopped skin check cannot be shared as a routine.');
   const canvas = document.createElement('canvas');
   canvas.width = 1080; canvas.height = 1350;
@@ -23,21 +31,14 @@ export async function shareLabel(scan: ShareableScan, plan: RoutinePlan): Promis
   }
   function wrap(value: string, x: number, y: number, maxWidth: number, size = 25, lineHeight = 34, maxLines = 3): number {
     ctx!.font = `${size}px "Atkinson Hyperlegible Next", sans-serif`;
-    const words = value.split(/\s+/); let line = '', lines = 0;
-    for (const word of words) {
-      const next = line ? `${line} ${word}` : word;
-      if (ctx!.measureText(next).width > maxWidth && line) {
-        lines++; text(line, x, y, size); y += lineHeight; line = word;
-        if (lines >= maxLines - 1) break;
-      } else line = next;
-    }
-    if (line) text(line, x, y, size);
-    return y + lineHeight;
+    const lines = wrapLines(value, maxWidth, maxLines, value => ctx!.measureText(value).width);
+    for (const line of lines) { text(line, x, y, size); y += lineHeight; }
+    return y;
   }
   text('tvacha', 104, 134, 55, '#1F6B63', 'Archivo, sans-serif', 700);
   text('YOUR SKIN LABEL', 104, 195, 23, '#46595D', '"IBM Plex Mono", monospace');
   const parsed = new Date(scan.createdAt);
-  const date = Number.isNaN(parsed.getTime()) ? 'UNDATED' : parsed.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  const date = Number.isNaN(parsed.getTime()) ? 'UNDATED' : parsed.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
   text(`BATCH ${date.toUpperCase()} / ${scan.id.slice(0, 6).toUpperCase()}`, 104, 238, 21, '#46595D', '"IBM Plex Mono", monospace');
   ctx.strokeStyle = '#C9D8D3'; ctx.beginPath(); ctx.moveTo(104, 266); ctx.lineTo(976, 266); ctx.stroke();
   if (scan.analysis) {
@@ -47,7 +48,7 @@ export async function shareLabel(scan: ShareableScan, plan: RoutinePlan): Promis
       text(code, 114, y, 23, key === 'shine' ? '#000000' : '#FFFFFF', '"IBM Plex Mono", monospace', 700);
       text(label, 161, y, 27);
       for (let n = 0; n < 3; n++) { ctx.fillStyle = concern && n < concern.level ? color : '#E9F1EE'; ctx.fillRect(540 + n * 67, y - 22, 53, 18); }
-      text(concern ? `${concern.confidence} confidence` : 'not read', 765, y, 18, '#46595D', '"IBM Plex Mono", monospace');
+      text(concern ? `${concern.confidence === 'medium' ? 'MED' : concern.confidence.toUpperCase()} SURE` : 'NOT READ', 765, y, 18, '#46595D', '"IBM Plex Mono", monospace');
     });
   } else {
     text('A routine from my answers.', 104, 330, 38, '#12262B', 'Archivo, sans-serif', 700);
@@ -68,11 +69,8 @@ export async function shareLabel(scan: ShareableScan, plan: RoutinePlan): Promis
   // Invoke the share sheet immediately after generation if the platform supports image files.
   if (navigator.share && navigator.canShare?.({ files: [file] })) {
     try { await navigator.share({ title: 'My Tvacha Skin Label', files: [file] }); return 'shared'; }
-    catch (error) { if (error instanceof DOMException && error.name === 'AbortError') throw error; }
+    catch (error) { if (error && typeof error === 'object' && 'name' in error && error.name === 'AbortError') return 'cancelled'; }
   }
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a'); link.href = url; link.download = file.name;
-  document.body.appendChild(link); link.click(); link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  downloadBlob(blob, file.name);
   return 'downloaded';
 }

@@ -96,7 +96,7 @@ After a model call, scan storage and analytics are one guarded transaction. The 
 
 Other owned inserts (shelf, routine ticks, consent records, waitlist, invites, referral signups and related analytics) also check the original profile creation generation in the write statement. A stale request cannot recreate those rows after deletion or write into a freshly recreated profile. Progress photos require the exact original progress-consent record as well as the original profile generation and an existing owned scan.
 
-Deletion removes owned rows, roles, invite records and R2 objects. If R2 is temporarily unavailable while stored photos exist, deletion returns an error for retry rather than claiming the photos were deleted. Export contains the owner's records and photo metadata only, never another user, secrets, internal analytics or the internal R2 keys.
+Deletion removes owned rows, roles, invite records and R2 objects. If R2 is temporarily unavailable while stored photos exist, deletion returns an error for retry rather than claiming the photos were deleted. Export contains the owner's records and photo metadata only, never another user, secrets, other users’ analytics or the internal R2 keys. The user’s own event records are included.
 
 ## Verification
 
@@ -105,7 +105,7 @@ node --experimental-strip-types --test src/server/*.test.mjs
 node node_modules/typescript/bin/tsc --noEmit
 ```
 
-The thirteen backend unit tests exercise real quota and privacy-guard SQL with SQLite, zero/personal/global caps, deletion-resistant anonymous usage, in-flight consent withdrawal/account deletion, stale mutation rejection after profile recreation, cross-owner consent rejection, same-origin enforcement, safe redirect destinations, quiz validation, upload bounds and catalogue validation. Separate HTTP integration checks should exercise two independent cookie jars against the running local application; unit results alone do not prove deployed cross-account isolation or real-device camera behavior.
+The backend unit tests exercise real quota and privacy-guard SQL with SQLite, zero/personal/global caps, deletion-resistant anonymous usage, in-flight consent withdrawal/account deletion, stale mutation rejection after profile recreation, cross-owner consent rejection, same-origin enforcement, safe redirect destinations, quiz validation, upload bounds and catalogue validation. Separate HTTP integration checks should exercise two independent cookie jars against the running local application; unit results alone do not prove deployed cross-account isolation or real-device camera behavior.
 
 Run the optional HTTP integration suite against an already running, migrated local server:
 
@@ -115,7 +115,7 @@ $env:TVACHA_ADMIN_TEST='1'
 node --experimental-strip-types --test src/server/integration.test.mjs
 ```
 
-`TVACHA_ADMIN_TEST=1` enables local-only platform sign-in/admin/referral fixtures. It temporarily grants and restores the local Seedy role; a migration fixture runs only when that local account has no existing app data, to preserve user work. The six HTTP tests passed against local D1 and R2 on 24 October 2026. They use synthetic JPEGs and fixture-only addresses, with no real face photos or provider charges.
+`TVACHA_ADMIN_TEST=1` enables local-only platform sign-in/admin/referral fixtures. It temporarily grants and restores the local Seedy role; a migration fixture runs only when that local account has no existing app data, to preserve user work. The seven HTTP tests passed against local D1 and R2 on 25 October 2026. They use synthetic JPEGs and fixture-only addresses, with no real face photos or provider charges.
 
 | Table | Boundary and verification |
 | --- | --- |
@@ -126,14 +126,20 @@ node --experimental-strip-types --test src/server/integration.test.mjs
 | `shelf_items` | Owner-filtered reads/deletes; second guest cannot remove first guest's item; migration exercised. |
 | `progress_photos` | Owner-filtered metadata and R2 key resolution; second guest read/upload/delete denied; opt-in, JPEG retrieval and withdrawal deletion exercised. |
 | `waitlist` | Owner-filtered membership/export; age guard and distinct guest membership exercised. |
-| `events` | Server-owned event insertion; public mutation is an allowlisted event name only; export omits analytics and admin exposes aggregates. |
+| `events` | Server-owned event insertion; public mutation is an allowlisted event name only; export includes only the owner’s own events; admin exposes aggregates. |
 | `products` | Shared read, admin-only validated writes; guest writes denied; invalid admin product/SPF rejected. |
 | `rules` | Shared validated rule data, seeded server-side; no public mutation route. |
-| `settings` | Server/admin only; guest write denied and authorized cap save exercised. |
+| `settings` | Server/admin writes only; cap and contact edits require admin. Only the validated operator/support fields are exposed for legal pages. Guest writes denied; admin save/restore exercised. |
 | `user_roles` | Server only; normal signed-in account denied admin; explicit role grants access and fixture restores it. |
 | `scan_reservations` | Server only, owner/day filter; guest/account limits and transaction SQL tested. |
 | `scan_daily_usage` | Anonymous server-only aggregate; SQL tests confirm personal deletion cannot reset the global cap. |
 | `invites` | Owner-filtered opaque code; HTTP verifies no owner ID in link and migration. |
 | `referral_signups` | Server sign-in attribution and owner deletion; HTTP verifies signup count after guest migration. |
 
-This is tested server authorization, not database RLS certification. Production authentication, real Gemini calls and real Android/iPhone camera behavior still require deployment/device checks.
+This is tested server authorization, not database RLS certification. Production authentication and real Groq requests were checked separately. Real Android/iPhone camera behavior still requires device acceptance.
+
+## History and contact configuration
+
+`GET /api/scans` and `GET /api/photos` return owner-only pages with `nextCursor` and `totalCount`. Pages default to 30 records, with a maximum of 50. The cursor combines creation timestamp and ID; every query still filters the server identity. `?id=` retrieves an individually owned label/photo. Photo lists expose metadata only.
+
+Consent writes may specify `analysis`, `progressPhotos`, or both; at least one explicit choice is required. Omitted purposes remain untouched. `DELETE /api/waitlist` with `{}` removes only the current owner’s membership. `PATCH /api/admin/site` takes `{operatorName,supportEmail}`; both may be cleared. Only these validated contact fields are shared in `/api/state`, never arbitrary settings.

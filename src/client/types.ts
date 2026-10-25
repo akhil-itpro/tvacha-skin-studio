@@ -25,10 +25,15 @@ export type AppState = {
   } | null;
   consents: { analysis: boolean; progressPhotos: boolean };
   scans: Scan[];
+  scanCount: number;
+  nextScanCursor: string | null;
   ticks: { date: string; slot: "AM" | "PM"; step: string; done: boolean }[];
   shelf: ShelfItem[];
   products: Product[];
   photos: { id: string; scanId: string; createdAt: string }[];
+  photoCount: number;
+  nextPhotoCursor: string | null;
+  siteDetails: { operatorName: string; supportEmail: string };
   waitlist: boolean;
   isAdmin: boolean;
   services: {
@@ -45,6 +50,7 @@ export const dateKey = () =>
   );
 export const prettyDate = (d: string) =>
   new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
     day: "numeric",
     month: "short",
     year: "numeric",

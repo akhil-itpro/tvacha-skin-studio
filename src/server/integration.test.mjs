@@ -123,6 +123,12 @@ test('HTTP platform sign-in and server admin role checks',{skip:!base||process.e
   try{
     sql("INSERT INTO user_roles (owner_id,role) VALUES ('user:local_seedy','admin') ON CONFLICT(owner_id) DO UPDATE SET role='admin'");
     const dashboard=await signedIn('/api/admin');assert.equal(dashboard.status,200);assert.ok(Array.isArray(dashboard.data.products));assert.ok(Array.isArray(dashboard.data.funnel));
+    assert.equal((await signedIn('/api/admin/site','PATCH',{operatorName:'Fixture operator',supportEmail:'support@example.test',legalReviewed:true})).status,400);
+    try {
+      const details={operatorName:'Fixture operator',supportEmail:'support@example.test'};
+      assert.equal((await signedIn('/api/admin/site','PATCH',details)).status,200);
+      assert.deepEqual((await signedIn('/api/state')).data.siteDetails,details);
+    } finally { await signedIn('/api/admin/site','PATCH',dashboard.data.siteDetails); }
     assert.equal((await signedIn('/api/admin','PATCH',{dailyScanCap:dashboard.data.dailyScanCap})).status,200);
     assert.equal((await signedIn('/api/admin/products','POST',{})).status,400);
     assert.equal((await signedIn('/api/admin/products','POST',{...dashboard.data.products.find(p=>p.step==='sunscreen'),spf:10})).status,400);
@@ -130,6 +136,38 @@ test('HTTP platform sign-in and server admin role checks',{skip:!base||process.e
     if(previous.length){assert.match(previous[0].role,/^[a-z_]+$/);sql("UPDATE user_roles SET role = '"+previous[0].role+"' WHERE owner_id = 'user:local_seedy'");}
     else sql("DELETE FROM user_roles WHERE owner_id = 'user:local_seedy'");
   }
+});
+
+test('HTTP separate consent updates, paged history and waitlist removal preserve other purposes and owners',{skip:!base},async()=>{
+  const a=client(),b=client();await a('/api/state');await b('/api/state');
+  await a('/api/profile','POST',{ageConfirmed:true,quiz});await b('/api/profile','POST',{ageConfirmed:true,quiz});
+  try {
+    assert.equal((await a('/api/consents','POST',{})).status,400);
+    await a('/api/consents','POST',{analysis:true,progressPhotos:false});
+    await a('/api/consents','POST',{progressPhotos:true});
+    let exported=(await a('/api/export')).data;
+    assert.equal(exported.consents.filter(row=>row.purpose==='analysis').length,1);
+    assert.equal((await a('/api/state')).data.consents.analysis,true);
+    await a('/api/consents','POST',{analysis:false});
+    assert.equal((await a('/api/state')).data.consents.progressPhotos,true);
+    await a('/api/consents','POST',{progressPhotos:false});
+    assert.equal((await a('/api/state')).data.consents.analysis,false);
+    for(let i=0;i<3;i++)assert.equal((await a('/api/analyse','POST',{quiz,mode:'quiz'})).status,200);
+    const first=(await a('/api/scans?limit=1')).data;
+    assert.equal(first.scans.length,1);assert.equal(first.totalCount,3);assert.ok(first.nextCursor);
+    const second=(await a('/api/scans?limit=1&cursor='+first.nextCursor)).data;
+    assert.equal(second.scans.length,1);assert.notEqual(first.scans[0].id,second.scans[0].id);
+    assert.equal((await b('/api/scans?cursor='+first.nextCursor)).data.scans.length,0);
+    assert.equal((await a('/api/scans?cursor=invalid')).status,400);
+    const state=(await a('/api/state')).data;assert.equal(state.scanCount,3);
+    assert.deepEqual((await a('/api/photos')).data,{photos:[],nextCursor:null,totalCount:0});
+    await a('/api/waitlist','POST',{email:'a@example.test'});await b('/api/waitlist','POST',{email:'b@example.test'});
+    assert.equal((await a('/api/waitlist','DELETE',{ownerId:state.user.id})).status,400);
+    assert.equal((await a('/api/waitlist','DELETE',{})).status,200);
+    assert.equal((await a('/api/state')).data.waitlist,false);assert.equal((await b('/api/state')).data.waitlist,true);
+    assert.equal((await a('/api/state')).data.scanCount,3);
+    assert.equal((await a('/api/admin/site','PATCH',{operatorName:'Name',supportEmail:''})).status,403);
+  } finally { await a('/api/account','DELETE',{confirm:'DELETE'});await b('/api/account','DELETE',{confirm:'DELETE'}); }
 });
 
 test('HTTP sign-in migrates a guest label and records an opaque referral signup',{skip:!base||process.env.TVACHA_ADMIN_TEST!=='1'},async t=>{

@@ -2,6 +2,7 @@
 @import "./camera.css";
 @import "./workspace.css";
 @import "./admin.css";
+@import "./completion.css";
 
 :root {
   --tile: #e9f1ee;

@@ -1,4 +1,13 @@
 import { z } from "zod";
+export const consentSchema = z.object({
+  analysis: z.boolean().optional(),
+  progressPhotos: z.boolean().optional(),
+}).strict().refine(value => value.analysis !== undefined || value.progressPhotos !== undefined,
+  "Choose which consent to update.");
+export const siteDetailsSchema = z.object({
+  operatorName: z.string().trim().max(120).refine(value => !/[\u0000-\u001f\u007f]/.test(value), "Use a plain operator name."),
+  supportEmail: z.union([z.literal(""), z.string().trim().email().max(254)]),
+}).strict();
 export const concernKeys = [
   "shine",
   "breakouts",

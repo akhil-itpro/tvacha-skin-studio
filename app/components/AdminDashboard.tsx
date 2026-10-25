@@ -54,6 +54,7 @@ type AdminData = {
   totals: { scans: number; photoScans: number | null; users: number } | null;
   productClicks: { productId: string | null; count: number }[];
   dailyScanCap: number;
+  siteDetails: AppState["siteDetails"];
   waitlist: { price: string | null; count: number }[];
   retention: {
     eligible: number;
@@ -181,6 +182,8 @@ export default function AdminDashboard({ state, notify, refresh }: Props) {
   const [cap, setCap] = useState("20"),
     [savingCap, setSavingCap] = useState(false),
     [capError, setCapError] = useState("");
+  const [operatorName, setOperatorName] = useState(""), [supportEmail, setSupportEmail] = useState("");
+  const [savingSite, setSavingSite] = useState(false), [siteError, setSiteError] = useState("");
   const [query, setQuery] = useState(""),
     [stepFilter, setStepFilter] = useState("all"),
     [statusFilter, setStatusFilter] = useState("all");
@@ -200,6 +203,8 @@ export default function AdminDashboard({ state, notify, refresh }: Props) {
       if (identityRef.current !== identity) return;
       setData(result);
       setCap(String(result.dailyScanCap));
+      setOperatorName(result.siteDetails.operatorName);
+      setSupportEmail(result.siteDetails.supportEmail);
     } catch (err) {
       if (identityRef.current === identity) setError(errorMessage(err));
     } finally {
@@ -272,6 +277,19 @@ export default function AdminDashboard({ state, notify, refresh }: Props) {
     } finally {
       setChangingProduct("");
     }
+  }
+
+  async function saveSite(event: FormEvent) {
+    event.preventDefault();
+    if (savingSite) return;
+    setSavingSite(true); setSiteError("");
+    try {
+      const result = await api<{ siteDetails: AppState["siteDetails"] }>("/api/admin/site", "PATCH", { operatorName, supportEmail });
+      setData(previous => previous ? { ...previous, siteDetails: result.siteDetails } : previous);
+      await refresh();
+      notify("Operator and support details updated on the draft legal pages.");
+    } catch (error) { setSiteError(errorMessage(error)); }
+    finally { setSavingSite(false); }
   }
 
   if (!state)
@@ -371,7 +389,7 @@ export default function AdminDashboard({ state, notify, refresh }: Props) {
         <button
           className="button secondary"
           onClick={() => void load()}
-          disabled={loading || savingCap}
+          disabled={loading || savingCap || savingSite}
         >
           <RefreshCw size={16} className={loading ? "spin" : ""} />
           {loading ? "Refreshing…" : "Refresh data"}
@@ -392,6 +410,17 @@ export default function AdminDashboard({ state, notify, refresh }: Props) {
         </div>
       )}
 
+      <section className="section-card founder-site-details" aria-labelledby="founder-site-title">
+        <span className="eyebrow">MAKE IT YOURS</span>
+        <h2 id="founder-site-title">Operator and support details.</h2>
+        <p>These details appear on the draft Privacy and Terms pages. Add a contact you want visitors to use. Legal review and appointment of a grievance contact remain pending.</p>
+        <form onSubmit={saveSite}>
+          <label className="field-label">Operator name<input value={operatorName} onChange={event => setOperatorName(event.target.value)} maxLength={120} placeholder="Your business or operator name" autoComplete="organization" /></label>
+          <label className="field-label">Support email<input type="email" value={supportEmail} onChange={event => setSupportEmail(event.target.value)} maxLength={254} placeholder="support@example.com" autoComplete="email" /></label>
+          {siteError && <p className="alert" role="alert">{siteError}</p>}
+          <button className="button secondary" disabled={savingSite}>{savingSite ? <LoaderCircle size={17} className="spin" /> : <Check size={17} />}{savingSite ? "Saving details…" : "Save contact details"}</button>
+        </form>
+      </section>
       <section className="founder-stat-grid" aria-label="Activity overview">
         {[
           {

@@ -124,6 +124,10 @@ test('AM/PM limits, mandatory sunscreen, one new active and deterministic output
     assert.ok(result.am.some(step => step.key === 'sunscreen'));
     assert.ok(result.products.filter(product => product.hasActive).length <= 1);
     assert.equal(new Set(result.am.map(step => step.key)).size, result.am.length);
+    for(const step of [...result.am,...result.pm])for(const alternative of step.alternatives||[]){
+      assert.ok(step.product && alternative.priceInr < step.product.priceInr);
+      assert.equal(alternative.step,step.key);
+    }
     assert.deepEqual(result, buildRoutine(input));
   }
 });

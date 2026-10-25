@@ -12,6 +12,7 @@ import {
 import type { Product, ShelfItem, QuizAnswers } from "@/src/domain/types";
 import { analysePhoto, analysisConfiguration } from "./analysis";
 import { reserveScan } from "./quota";
+import { historyOptions, historyCursor, historyQuery } from "./history";
 import {
   INSERT_SCAN_GUARDED,
   INSERT_EVENT_FOR_SCAN,
@@ -44,6 +45,8 @@ import {
   safeProductUrl,
   concernKeys,
   validRoutineDate,
+  consentSchema,
+  siteDetailsSchema,
 } from "./validation";
 
 type Row = Record<string, unknown>;
@@ -64,6 +67,22 @@ function scan(row: Row) {
     message: row.message,
     model: row.model,
   };
+}
+async function history(current: Owner, table: "scans" | "progress_photos", params = new URLSearchParams()) {
+  const { cursor, limit } = historyOptions(params);
+  const args = cursor ? [current.id, cursor.createdAt, cursor.createdAt, cursor.id, limit + 1] : [current.id, limit + 1];
+  const [result, count] = await Promise.all([
+    db().prepare(historyQuery(table, !!cursor)).bind(...args).all<Row>(),
+    db().prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE owner_id = ?`).bind(current.id).first<{count: number}>(),
+  ]);
+  const rows = result.results.slice(0, limit);
+  return { rows, totalCount: count?.count ?? 0, nextCursor: result.results.length > limit ? historyCursor(rows[rows.length - 1]) : null };
+}
+const photoMetadata = (row: Row) => ({ id: row.id, scanId: row.scan_id, createdAt: row.created_at });
+async function siteDetails() {
+  const row = await db().prepare("SELECT value FROM settings WHERE key = 'site_details'").first<{value: string}>();
+  const value = siteDetailsSchema.safeParse(parse(row?.value));
+  return value.success ? value.data : { operatorName: "", supportEmail: "" };
 }
 async function catalog(includeInactive = false): Promise<Product[]> {
   let rows = await db()
@@ -153,12 +172,7 @@ async function state(current: Owner) {
       .bind(current.id)
       .first<Row>(),
     latestConsents(current.id),
-    db()
-      .prepare(
-        "SELECT * FROM scans WHERE owner_id = ? ORDER BY created_at DESC LIMIT 200",
-      )
-      .bind(current.id)
-      .all<Row>(),
+    history(current, "scans"),
     db()
       .prepare(
         "SELECT date,slot,step,done FROM routine_ticks WHERE owner_id = ? ORDER BY date DESC LIMIT 800",
@@ -167,12 +181,7 @@ async function state(current: Owner) {
       .all<Row>(),
     shelfFor(current.id),
     catalog(),
-    db()
-      .prepare(
-        "SELECT id,scan_id,created_at FROM progress_photos WHERE owner_id = ? ORDER BY created_at DESC LIMIT 200",
-      )
-      .bind(current.id)
-      .all<Row>(),
+    history(current, "progress_photos"),
     db()
       .prepare("SELECT owner_id FROM waitlist WHERE owner_id = ?")
       .bind(current.id)
@@ -202,16 +211,17 @@ async function state(current: Owner) {
         }
       : null,
     consents,
-    scans: scans.results.map(scan),
+    scans: scans.rows.map(scan),
+    scanCount: scans.totalCount,
+    nextScanCursor: scans.nextCursor,
     ticks: ticks.results.map((t) => ({ ...t, done: t.done === 1 })),
     shelf,
     products,
     rules: await ingredientRules(),
-    photos: photos.results.map((p) => ({
-      id: p.id,
-      scanId: p.scan_id,
-      createdAt: p.created_at,
-    })),
+    photos: photos.rows.map(photoMetadata),
+    photoCount: photos.totalCount,
+    nextPhotoCursor: photos.nextCursor,
+    siteDetails: await siteDetails(),
     waitlist: !!waiting,
     isAdmin: admin,
     services: {
@@ -251,14 +261,12 @@ async function saveProfile(request: Request, current: Owner) {
   return { ok: true };
 }
 async function saveConsents(request: Request, current: Owner) {
-  const data = z
-    .object({ analysis: z.boolean(), progressPhotos: z.boolean().optional() })
-    .strict()
-    .parse(await body(request));
+  const data = consentSchema.parse(await body(request));
   const timestamp = now();
   const version = "2026-10-25:" + analysisConfiguration(env).provider;
-  const statements = [
-    db()
+  const statements = [];
+  // Only an explicit analysis choice can acknowledge the current provider notice.
+  if (data.analysis !== undefined) statements.push(db()
       .prepare(
         `INSERT INTO consents (id,owner_id,purpose,granted,version,created_at) SELECT ?,?,?,?,?,? WHERE ${PROFILE_GENERATION_EXISTS}`,
       )
@@ -270,8 +278,7 @@ async function saveConsents(request: Request, current: Owner) {
         version,
         timestamp,
         ...generationArgs(current),
-      ),
-  ];
+      ));
   // Omitting the per-check saving choice preserves earlier consent. A stale browser
   // cannot silently re-grant a choice withdrawn in another tab.
   if (data.progressPhotos !== undefined)
@@ -294,7 +301,7 @@ async function saveConsents(request: Request, current: Owner) {
   requireWrite(writes[0]);
   if (data.progressPhotos === false) await deletePhotos(current.id);
   await event(current, "consent_given", {
-    analysis: data.analysis,
+    ...(data.analysis !== undefined ? { analysis: data.analysis } : {}),
     ...(data.progressPhotos !== undefined
       ? { progressPhotos: data.progressPhotos }
       : {}),
@@ -584,6 +591,11 @@ async function modifyShelf(request: Request, current: Owner) {
 }
 async function photos(request: Request, current: Owner) {
   if (request.method === "GET") {
+    const params = new URL(request.url).searchParams;
+    if (!params.has("id")) {
+      const page = await history(current, "progress_photos", params);
+      return { photos: page.rows.map(photoMetadata), nextCursor: page.nextCursor, totalCount: page.totalCount };
+    }
     const photoId = z
       .string()
       .uuid()
@@ -719,10 +731,15 @@ async function exportData(current: Owner) {
     formatVersion: 1,
     user: { id: current.id, email: current.email },
     ...Object.fromEntries(entries),
-    note: "Photo metadata is included. Download individual photos from Me before deleting your data.",
+    note: "Photo metadata is included. Download individual photos from My progress before deleting your data.",
   };
 }
 async function joinWaitlist(request: Request, current: Owner) {
+  if (request.method === "DELETE") {
+    z.object({}).strict().parse(await body(request));
+    await db().prepare("DELETE FROM waitlist WHERE owner_id = ?").bind(current.id).run();
+    return { ok: true };
+  }
   const data = z
     .object({
       email: z.string().trim().email().max(254),
@@ -915,6 +932,7 @@ async function admin(request: Request, current: Owner) {
     retention: returns,
     referrals: referrals.results,
     products: await catalog(true),
+    siteDetails: await siteDetails(),
     security: {
       mechanism:
         "Every owned query is scoped by server identity; D1 is not a client database and does not implement PostgreSQL RLS.",
@@ -952,6 +970,13 @@ async function adminProduct(request: Request, current: Owner) {
     .bind(data.id, JSON.stringify(data), data.active ? 1 : 0, now())
     .run();
   return { ok: true, product: data };
+}
+async function adminSite(request: Request, current: Owner) {
+  await requireAdmin(current);
+  const details = siteDetailsSchema.parse(await body(request));
+  await db().prepare("INSERT INTO settings (key,value) VALUES ('site_details',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+    .bind(JSON.stringify(details)).run();
+  return { ok: true, siteDetails: details };
 }
 async function go(request: Request, current: Owner, path: string) {
   const productId = path.slice(3);
@@ -1021,17 +1046,10 @@ export async function handle(request: Request): Promise<Response> {
         if (!row)
           throw new HttpError(404, "This label was not found in your account.");
         result = { scans: [scan(row)] };
-      } else
-        result = {
-          scans: (
-            await db()
-              .prepare(
-                "SELECT * FROM scans WHERE owner_id = ? ORDER BY created_at DESC, id DESC LIMIT 200",
-              )
-              .bind(current.id)
-              .all<Row>()
-          ).results.map(scan),
-        };
+      } else {
+        const page = await history(current, "scans", new URL(request.url).searchParams);
+        result = { scans: page.rows.map(scan), nextCursor: page.nextCursor, totalCount: page.totalCount };
+      }
     } else if (path === "photos" && ["GET", "POST", "DELETE"].includes(method))
       result = await photos(request, current);
     else if (path === "export" && method === "GET")
@@ -1046,7 +1064,7 @@ export async function handle(request: Request): Promise<Response> {
       current.cookie =
         "tvacha_guest=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0";
       result = { ok: true };
-    } else if (path === "waitlist" && method === "POST")
+    } else if (path === "waitlist" && ["POST", "DELETE"].includes(method))
       result = await joinWaitlist(request, current);
     else if (path === "events" && method === "POST")
       result = await clientEvent(request, current);
@@ -1056,6 +1074,8 @@ export async function handle(request: Request): Promise<Response> {
       result = await admin(request, current);
     else if (path === "admin/products" && ["POST", "PATCH"].includes(method))
       result = await adminProduct(request, current);
+    else if (path === "admin/site" && method === "PATCH")
+      result = await adminSite(request, current);
     else if (path.startsWith("go/") && method === "GET")
       result = await go(request, current, path);
     else throw new HttpError(404, "This endpoint was not found.");

@@ -244,7 +244,7 @@ export function buildRoutine(
     const choices = rank(key, key === "treatment");
     const chosen = choices[0] ?? null;
     const alternatives = choices
-      .filter((product) => product.id !== chosen?.id)
+      .filter((product) => chosen && product.id !== chosen.id && product.priceInr < chosen.priceInr)
       .sort((a, b) => a.priceInr - b.priceInr || a.id.localeCompare(b.id))
       .slice(0, 2);
     let budgetNote: string | undefined;

@@ -220,7 +220,6 @@ export default function TvachaApp() {
         notify("Your Tvacha data has been deleted.");
       } else {
         await api("/api/consents", "POST", {
-          analysis: state?.consents.analysis || false,
           progressPhotos: false,
         });
         await refresh();
@@ -496,6 +495,7 @@ export default function TvachaApp() {
                 <Legal
                   type={path === "/privacy" ? "privacy" : "terms"}
                   navigate={navigate}
+                  details={state?.siteDetails}
                 />
               )}{" "}
               {path === "/admin" && (

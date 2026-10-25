@@ -212,7 +212,7 @@ export function SkinLabel({
     </div>
   );
 }
-export function ProductCard({ product: p }: { product: Product }) {
+export function ProductCard({ product: p, alternatives = [] }: { product: Product; alternatives?: Product[] }) {
   return (
     <article className="product-card">
       <div className={"product-art-bg " + p.step}>
@@ -244,6 +244,16 @@ export function ProductCard({ product: p }: { product: Product }) {
             ? "We may earn a commission."
             : "Brand link · no affiliate commission."}
         </span>
+        {alternatives.length > 0 && <details className="product-alternatives">
+          <summary>Lower-cost options · {alternatives.length}</summary>
+          <p>Choose one product for this step. Reference prices below.</p>
+          {alternatives.map(option => <div key={option.id}>
+            <a href={"/api/go/" + encodeURIComponent(option.id)} target="_blank" rel="noopener noreferrer">
+              <span>{option.name}</span><strong className="mono">{money(option.priceInr)}</strong><ArrowUpRight size={15} />
+            </a>
+            <small>{option.size} · {option.affiliateUrl ? "We may earn a commission." : "Brand link · no affiliate commission."}</small>
+          </div>)}
+        </details>}
       </div>
     </article>
   );

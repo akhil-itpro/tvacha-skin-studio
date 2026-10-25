@@ -1,6 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { isSameOrigin, quizSchema, productSchema, safeProductUrl, validateImage, validRoutineDate } from './validation.ts';
+import { consentSchema, siteDetailsSchema } from './validation.ts';
+
+test('consent updates require an explicit purpose and preserve omitted choices',()=>{
+  assert.deepEqual(consentSchema.parse({progressPhotos:false}),{progressPhotos:false});
+  assert.deepEqual(consentSchema.parse({analysis:false}),{analysis:false});
+  for(const value of [{},{analysis:'yes'},{progressPhotos:true,ownerId:'other'}])assert.equal(consentSchema.safeParse(value).success,false);
+});
+test('operator contact fields accept a plain name and valid email or explicit clearing',()=>{
+  assert.deepEqual(siteDetailsSchema.parse({operatorName:'  Tvacha  ',supportEmail:'support@example.com'}),{operatorName:'Tvacha',supportEmail:'support@example.com'});
+  assert.equal(siteDetailsSchema.safeParse({operatorName:'',supportEmail:''}).success,true);
+  for(const value of [{operatorName:'Name',supportEmail:'javascript:bad'},{operatorName:'Name\nNew line',supportEmail:''},{operatorName:'Name',supportEmail:'a@example.com',legalReviewed:true}])assert.equal(siteDetailsSchema.safeParse(value).success,false);
+});
 
 test('routine dates reject impossible calendar dates and future check-ins using India time',()=>{
   const now=new Date('2026-10-24T20:00:00Z');

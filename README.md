@@ -11,10 +11,10 @@ Tvacha gives cosmetic guidance, not a diagnosis. The UI calls out uncertainty an
 - Front-camera capture, mirrored preview, on-device single-face/position/light/sharpness checks, JPEG resize, photo confirmation and upload fallback. The original photo stays in memory unless the user separately chooses to save it.
 - Server-only Groq image analysis with explicit zero-data-retention configuration, bounded requests, strict JSON validation, one retry and prohibited-language checks. Optional Gemini integration requires paid-service data protections. Provider failure or missing configuration gives a clearly labelled quiz routine with no photo scores.
 - A printed Skin Label for valid photo results, confidence per concern, up to three focus areas, AM/PM routines and ingredient guidance.
-- 24 real products from three official brand catalogues. Prices are dated reference list prices, not a live price feed. Product selection is code, never AI or commission-based ranking. Budget, fragrance, pregnancy cautions, shelf coverage, sunscreen and one-new-active limits are enforced.
-- Saved labels, daily routine ticks, gentle weekly progress, shelf search/free-text entry, comparisons and weekly rescan reminders.
+- 24 real products from three official brand catalogues. Prices are dated reference list prices, not a live price feed. Product selection is code, never AI or commission-based ranking. Budget, fragrance, pregnancy cautions, shelf coverage, sunscreen and one-new-active limits are enforced. Lower-cost eligible alternatives appear beside product picks.
+- Complete paginated label/photo history, daily routine ticks, gentle weekly progress, shelf search/free-text entry, comparisons and weekly rescan reminders.
 - Platform sign-in, guest-to-account migration, private opt-in progress photos, individual deletion, JSON export and deletion of all Tvacha account data.
-- Server-authorized founder analytics, scan caps, product editing/deactivation, an opaque invite link with referral signup counts, and a Pro waitlist with an optional price question. No payments.
+- Server-authorized founder analytics, scan caps, product editing/deactivation, editable operator/support details, an opaque invite link with referral signup counts, and a Pro waitlist with join/leave controls and an optional price question. No payments.
 - Face-free PNG label sharing/download, installable web app metadata and icons, install guidance, and a generic offline page. Personal data and face photos are excluded from the service-worker cache.
 - Self-hosted Archivo, Atkinson Hyperlegible Next and IBM Plex Mono fonts. Source URLs, checksums and font licenses are in `public/fonts`.
 
@@ -111,7 +111,7 @@ node node_modules/typescript/bin/tsc --noEmit
 node scripts/run-framework.mjs build
 ```
 
-Run `npm test` for all 53 unit/regression checks. The six HTTP integration checks run against the local database/storage with `TVACHA_TEST_URL` and `TVACHA_ADMIN_TEST=1`, as documented in BACKEND.md. The suite checks catalogue integrity, strict six-concern JSON, restricted output, uncertainty, symptom stops, budget/sensitivity combinations, safe shelf matching, date validity, provider retries, bounded responses, data policy gates, deletion barriers, quotas, private photos and sign-in migration.
+Run `npm test` for all 61 unit/regression checks. The seven HTTP integration checks run against the local database/storage with `TVACHA_TEST_URL` and `TVACHA_ADMIN_TEST=1`, as documented in BACKEND.md. The suite checks catalogue integrity, strict six-concern JSON, restricted output, uncertainty, symptom stops, budget/sensitivity combinations, safe shelf matching, date validity, provider retries, bounded responses, data policy gates, deletion barriers, quotas, private photos and sign-in migration.
 
 Unit tests do not establish clinical accuracy, real-provider latency, deployed account isolation or real-device camera quality. See the task's verification report for checks actually completed. Re-run relevant tests when changing safety rules, data ownership, consent or product selection.
 
