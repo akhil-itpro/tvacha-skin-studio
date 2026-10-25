@@ -19,6 +19,10 @@ next-env.d.ts
 
 # Test output
 /coverage/
+*.har
+*.cookies
+tvacha-my-data-*.json
+tvacha-label-*.png
 
 # Package-manager logs
 npm-debug.log*

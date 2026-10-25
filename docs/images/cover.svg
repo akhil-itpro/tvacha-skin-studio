@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-labelledby="title desc">
+<title id="title">Tvacha — product and engineering portfolio</title><desc id="desc">A skin check that knows when it is not sure. Six labelled cosmetic concern swatches.</desc>
+<rect width="1200" height="300" fill="#e9f1ee"/><rect x="24" y="24" width="1152" height="252" fill="#fff" stroke="#c9d8d3"/>
+<text x="62" y="73" font-family="monospace" font-size="15" letter-spacing="2" fill="#46595d">PRODUCT + ENGINEERING / PORTFOLIO</text>
+<text x="60" y="170" font-family="sans-serif" font-size="86" font-weight="700" letter-spacing="-5" fill="#1f6b63">tvacha.</text>
+<text x="64" y="220" font-family="sans-serif" font-size="24" fill="#12262b">A skin check that knows when it isn’t sure.</text>
+<g font-family="monospace" font-size="25" font-weight="700" text-anchor="middle">
+<rect x="720" y="98" width="62" height="76" fill="#b17a3b"/><text x="751" y="146" fill="#000">S</text>
+<rect x="782" y="98" width="62" height="76" fill="#e01c7d"/><text x="813" y="146" fill="#fff">B</text>
+<rect x="844" y="98" width="62" height="76" fill="#7d540e"/><text x="875" y="146" fill="#fff">D</text>
+<rect x="906" y="98" width="62" height="76" fill="#750e15"/><text x="937" y="146" fill="#fff">R</text>
+<rect x="968" y="98" width="62" height="76" fill="#1670e3"/><text x="999" y="146" fill="#fff">Y</text>
+<rect x="1030" y="98" width="62" height="76" fill="#3e266c"/><text x="1061" y="146" fill="#fff">U</text>
+</g><text x="720" y="216" font-family="monospace" font-size="13" fill="#46595d">COSMETIC GUIDANCE · FOR ADULTS 18+</text>
+</svg>

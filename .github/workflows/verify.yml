@@ -1,0 +1,70 @@
+name: Verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: 'true'
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Use Node 24
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm run install:ci
+      - name: Check documentation and repository boundaries
+        run: npm run docs:check
+      - name: TypeScript
+        run: npm run typecheck
+      - name: Unit and regression tests
+        run: npm test
+      - name: Production build
+        run: npm run build
+      - name: HTTP integration with fresh local D1 and R2
+        shell: bash
+        run: |
+          set -euo pipefail
+          for migration in drizzle/*.sql; do
+            node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file "$migration"
+          done
+          node scripts/run-framework.mjs dev > "$RUNNER_TEMP/tvacha-dev.log" 2>&1 &
+          app_pid=$!
+          cleanup() {
+            result=$?
+            kill "$app_pid" 2>/dev/null || true
+            if [ "$result" -ne 0 ]; then tail -n 80 "$RUNNER_TEMP/tvacha-dev.log"; fi
+            exit "$result"
+          }
+          trap cleanup EXIT
+          node --input-type=module <<'NODE'
+          const deadline = Date.now() + 60000;
+          while (Date.now() < deadline) {
+            try {
+              const response = await fetch('http://127.0.0.1:5173/api/state', { signal: AbortSignal.timeout(2000) });
+              if (response.ok) process.exit(0);
+            } catch {}
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+          throw new Error('Local application did not become ready within 60 seconds');
+          NODE
+          TVACHA_TEST_URL=http://127.0.0.1:5173 TVACHA_ADMIN_TEST=1 npm run test:integration

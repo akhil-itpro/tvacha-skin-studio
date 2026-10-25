@@ -1,5 +1,5 @@
 {
-  "name": "site-creator-vinext-starter",
+  "name": "tvacha-skin-studio",
   "version": "0.1.0",
   "private": true,
   "engines": {
@@ -14,7 +14,8 @@
     "db:generate": "drizzle-kit generate",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test src/domain/domain.test.mjs src/client/client.test.mjs src/client/photo-quality.test.mjs src/server/analysis.test.mjs src/server/validation.test.mjs src/server/quota.test.mjs src/server/guards.test.mjs src/server/history.test.mjs",
-    "test:integration": "node --experimental-strip-types --test src/server/integration.test.mjs"
+    "test:integration": "node --experimental-strip-types --test src/server/integration.test.mjs",
+    "docs:check": "node scripts/check-repository.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -69,5 +70,6 @@
     "miniflare": {
       "sharp": "0.35.4"
     }
-  }
+  },
+  "description": "Cosmetic skincare guidance with explicit AI uncertainty, deterministic product rules and private user data."
 }

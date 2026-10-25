@@ -12,7 +12,7 @@ Tvacha runs as a Vinext application on Cloudflare Workers. Sites provides deploy
 - Sign-in is the hosting platform's **Sign in with ChatGPT**, not the prompt pack's email OTP. The documented Sites runtime owns its authentication routes; do not replace them with a mock OTP form.
 - Payments are intentionally absent: the pack gates payments on business, KYC and legal requirements. The waitlist accepts no payment.
 
-Provider-side data retention and the production legal notices must be reviewed for the selected Gemini account before public use. The application neither stores nor logs an analysis photo unless the user separately chooses progress-photo storage.
+Provider-side data retention and the production legal notices must be reviewed for the selected provider account before public use. The application neither stores nor logs an analysis photo unless the user separately chooses progress-photo storage.
 
 ## Environment
 
@@ -64,18 +64,20 @@ All JSON mutation requests require `Content-Type: application/json` and a same-o
 | --- | --- |
 | `GET /api/state` | User, profile, current consent flags, scans, ticks, shelf, active products, photo metadata, waitlist status, admin flag, service availability, existing `inviteCode` or null. |
 | `POST /api/profile` | `{ageConfirmed:true, quiz?}`. Under-18 confirmation cannot be accepted. |
-| `POST /api/consents` | `{analysis:boolean, progressPhotos?:boolean}`. Omit progressPhotos to preserve the current server choice. Explicit false withdraws and deletes saved photos. Analysis consent is stamped with its named provider; a provider change requires new consent. |
-| `POST /api/analyse` | `{quiz, mode:'quiz'|'photo', image?:JPEGDataURL}`; returns `{scan,routine,message}` or `{retake:true,retakeReasons,routine,message}`. |
+| `POST /api/consents` | `{analysis?:boolean, progressPhotos?:boolean}`. At least one explicit purpose is required; omitted purposes preserve the current server choice. Explicit false withdraws and deletes saved photos. Analysis consent is stamped with its named provider; a provider change requires new consent. |
+| `POST /api/analyse` | `{quiz, mode:'quiz'|'photo', image?:JPEGDataURL}`; returns `{scan,routine,message}`. Unusable photos complete as a labelled quiz routine; no mandatory retake response. |
 | `POST /api/routine` | `{date:'YYYY-MM-DD',slot:'AM'|'PM',step,done:boolean}`. |
 | `POST /api/shelf` | `{name,step,productId?,hasActive?}`; returns `{item}`. |
 | `DELETE /api/shelf` | `{id}`. |
-| `GET /api/scans` | Owner's scans, newest first. |
+| `GET /api/scans` | Owner-only cursor pages with `scans`, `nextCursor`, `totalCount`; `?id=` reads an owned label. |
+| `GET /api/photos` | Owner-only cursor pages with photo metadata, `nextCursor`, `totalCount`. |
 | `GET /api/photos?id=<uuid>` | Private JPEG with no-store headers. |
 | `POST /api/photos` | `{scanId,image:JPEGDataURL}`. Existing owned scan and current opt-in required. |
 | `DELETE /api/photos` | `{id}`. |
 | `GET /api/export` | Owned records, own app events, and photo metadata as JSON. Individual JPEGs use `/api/photos`. |
 | `DELETE /api/account` | `{confirm:'DELETE'}`. Deletes this app's data and photos immediately; does not delete the user's ChatGPT account. |
 | `POST /api/waitlist` | `{email,price?:'49'|'99'|'199'|'wouldnt_pay',ref?}`. |
+| `DELETE /api/waitlist` | `{}` removes only the current owner’s membership. |
 | `GET /api/invite` | After 18+ confirmation, returns opaque `{code,signups}`. |
 | `POST /api/invite` | After 18+ confirmation, `{ref:'16-hex-code'}`. Retain a landing referral in session memory until age confirmation. First valid referral wins; account sign-in records a signup. |
 | `POST /api/events` | `{name}` from the client-event allowlist only; arbitrary properties and photo data are rejected. |
@@ -83,6 +85,7 @@ All JSON mutation requests require `Content-Type: application/json` and a same-o
 | `GET /api/admin` | Founder funnel, daily scans, click counts, retention, waitlist counts, referral signups, catalogue and security mechanism. |
 | `PATCH /api/admin` | `{dailyScanCap:0..10000}`. |
 | `POST/PATCH /api/admin/products` | A complete validated `Product` object. |
+| `PATCH /api/admin/site` | `{operatorName,supportEmail}`; validated contact fields only. |
 
 ## Isolation and deletion
 
